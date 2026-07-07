@@ -1,0 +1,10 @@
+﻿{
+  "wssUrl": "wss://sub-store.example.com/ws/relay",
+  "token": "change-me",
+  "clientId": "node-1",
+  "clientName": "Node Relay 1",
+  "maxBodyBytes": 5242880,
+  "fetchTimeoutMs": 15000,
+  "reconnectMinMs": 1000,
+  "reconnectMaxMs": 30000
+}
