@@ -120,7 +120,7 @@ class RelayClient {
             const response = await fetch(url, {
                 method: 'GET',
                 headers,
-                redirect: 'follow',
+                    redirect: 'manual',
                 signal: controller.signal,
             });
 
