@@ -119,6 +119,8 @@ async function downloadFileSources({
                     undefined,
                     undefined,
                     noCache,
+                    undefined,
+                    { relayNodeId: file.relayNodeId },
                 );
             } catch (err) {
                 errors[url] = err;
@@ -323,6 +325,7 @@ async function produceArtifact({
                                     awaitCustomCache,
                                     noCache || sub.noCache,
                                     true,
+                                    { relayNodeId: sub.relayNodeId },
                                 );
                             } catch (err) {
                                 errors[url] = err;
@@ -382,6 +385,7 @@ async function produceArtifact({
                                     awaitCustomCache,
                                     noCache || sub.noCache,
                                     true,
+                                    { relayNodeId: sub.relayNodeId },
                                 );
                             } catch (err) {
                                 errors[url] = err;
@@ -565,6 +569,7 @@ async function produceArtifact({
                                                 undefined,
                                                 noCache || sub.noCache,
                                                 true,
+                                                { relayNodeId: sub.relayNodeId },
                                             );
                                         } catch (err) {
                                             errors[url] = err;

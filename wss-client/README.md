@@ -15,7 +15,7 @@ Main service to client:
   "type": "fetch",
   "id": "request-id",
   "url": "https://example.com/sub",
-  "uac": "clash.meta/v1.19.23",
+  "uac": "clash.meta/v1.19.25",
   "headers": {
     "accept": "*/*"
   },
@@ -69,9 +69,22 @@ Edit `config.json`:
   "maxBodyBytes": 5242880,
   "fetchTimeoutMs": 15000,
   "reconnectMinMs": 1000,
-  "reconnectMaxMs": 30000
+  "reconnectMaxMs": 30000,
+  "allowedProtocols": ["https:"],
+  "allowedHosts": [],
+  "allowPrivateNetwork": false,
+  "maxRedirects": 3
 }
 ```
+
+Security defaults:
+
+- `token` is required.
+- Only `https:` URLs are fetched by default.
+- Private, loopback, link-local, multicast, and reserved IP ranges are blocked by default.
+- Redirects are followed manually and each redirected URL is validated again.
+- Put explicit hostnames in `allowedHosts` only when you intentionally allow them.
+- Set `allowPrivateNetwork` to `true` only for a trusted private deployment.
 
 ## Run
 

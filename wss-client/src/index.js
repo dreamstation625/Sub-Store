@@ -1,4 +1,6 @@
-﻿import fs from 'node:fs';
+﻿import dns from 'node:dns/promises';
+import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,7 +108,7 @@ class RelayClient {
     }
 
     async fetchSubscription(message) {
-        const url = this.normalizeFetchUrl(message.url);
+        let url = await this.normalizeFetchUrl(message.url);
         const timeoutMs = positiveInt(message.timeout, this.config.defaultTimeoutMs);
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -115,25 +117,38 @@ class RelayClient {
         headers.set('user-agent', message.uac || message.userAgent || DEFAULT_UA);
         if (!headers.has('accept')) headers.set('accept', '*/*');
 
-        this.log(`fetching ${this.maskUrl(url)} timeout=${timeoutMs}`);
         try {
-            const response = await fetch(url, {
-                method: 'GET',
-                headers,
+            for (let redirectCount = 0; redirectCount <= this.config.maxRedirects; redirectCount++) {
+                this.log(`fetching ${this.maskUrl(url)} timeout=${timeoutMs}`);
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers,
                     redirect: 'manual',
-                signal: controller.signal,
-            });
+                    signal: controller.signal,
+                });
 
-            const body = await this.readLimitedText(response);
-            if (response.status < 200 || response.status >= 400) {
-                throw new Error(`statusCode: ${response.status}`);
+                if (isRedirectStatus(response.status)) {
+                    const location = response.headers.get('location');
+                    if (!location) throw new Error(`redirect ${response.status} missing location`);
+                    if (redirectCount >= this.config.maxRedirects) {
+                        throw new Error(`too many redirects: ${this.config.maxRedirects}`);
+                    }
+                    url = await this.normalizeFetchUrl(new URL(location, url).href);
+                    continue;
+                }
+
+                const body = await this.readLimitedText(response);
+                if (response.status < 200 || response.status >= 400) {
+                    throw new Error(`statusCode: ${response.status}`);
+                }
+
+                return {
+                    statusCode: response.status,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    body,
+                };
             }
-
-            return {
-                statusCode: response.status,
-                headers: Object.fromEntries(response.headers.entries()),
-                body,
-            };
+            throw new Error('unexpected redirect loop');
         } finally {
             clearTimeout(timeout);
         }
@@ -167,16 +182,29 @@ class RelayClient {
         return new TextDecoder().decode(bytes);
     }
 
-    normalizeFetchUrl(rawUrl) {
+    async normalizeFetchUrl(rawUrl) {
         if (!rawUrl || typeof rawUrl !== 'string') {
             throw new Error('url is required');
         }
 
         const url = new URL(rawUrl);
-        if (!['http:', 'https:'].includes(url.protocol)) {
+        if (!this.config.allowedProtocols.includes(url.protocol)) {
             throw new Error(`unsupported url protocol: ${url.protocol}`);
         }
+        await this.assertAllowedHost(url);
         return url.href;
+    }
+
+    async assertAllowedHost(url) {
+        const host = url.hostname;
+        if (this.config.allowedHosts.includes(host)) return;
+        if (!this.config.allowPrivateNetwork) {
+            const addresses = await resolveHostAddresses(host);
+            const privateAddress = addresses.find(isPrivateAddress);
+            if (privateAddress) {
+                throw new Error(`private network address is not allowed: ${host}`);
+            }
+        }
     }
 
     normalizeHeaders(rawHeaders) {
@@ -289,13 +317,21 @@ function readConfig() {
 
     return {
         wssUrl: requiredConfig(rawConfig, 'wssUrl', configPath),
-        token: rawConfig.token || '',
+        token: requiredConfig(rawConfig, 'token', configPath),
         clientId,
         clientName: rawConfig.clientName || clientId,
         maxBodyBytes: positiveInt(rawConfig.maxBodyBytes, 5 * 1024 * 1024),
         defaultTimeoutMs: positiveInt(rawConfig.fetchTimeoutMs, 15000),
         reconnectMinMs: positiveInt(rawConfig.reconnectMinMs, 1000),
         reconnectMaxMs: positiveInt(rawConfig.reconnectMaxMs, 30000),
+        allowedProtocols: Array.isArray(rawConfig.allowedProtocols)
+            ? rawConfig.allowedProtocols
+            : ['https:'],
+        allowedHosts: Array.isArray(rawConfig.allowedHosts)
+            ? rawConfig.allowedHosts
+            : [],
+        allowPrivateNetwork: rawConfig.allowPrivateNetwork === true,
+        maxRedirects: positiveInt(rawConfig.maxRedirects, 3),
     };
 }
 
@@ -313,3 +349,55 @@ function positiveInt(value, fallback) {
 function hostnameFallback() {
     return os.hostname() || 'sub-store-wss-client';
 }
+
+async function resolveHostAddresses(host) {
+    if (net.isIP(host)) return [host];
+    const records = await dns.lookup(host, { all: true, verbatim: true });
+    return records.map((record) => record.address);
+}
+
+function isRedirectStatus(status) {
+    return [301, 302, 303, 307, 308].includes(status);
+}
+
+function isPrivateAddress(address) {
+    const family = net.isIP(address);
+    if (family === 4) return isPrivateIPv4(address);
+    if (family === 6) {
+        const mapped = address.match(/^::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/i);
+        if (mapped) return isPrivateIPv4(mapped[1]);
+        return isPrivateIPv6(address);
+    }
+    return true;
+}
+
+function isPrivateIPv4(address) {
+    const parts = address.split('.').map((part) => Number.parseInt(part, 10));
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+        return true;
+    }
+    const [a, b] = parts;
+    return (
+        a === 0 ||
+        a === 10 ||
+        a === 127 ||
+        (a === 100 && b >= 64 && b <= 127) ||
+        (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        a >= 224
+    );
+}
+
+function isPrivateIPv6(address) {
+    const normalized = address.toLowerCase();
+    return (
+        normalized === '::1' ||
+        normalized === '::' ||
+        normalized.startsWith('fc') ||
+        normalized.startsWith('fd') ||
+        normalized.startsWith('fe80:') ||
+        normalized.startsWith('ff')
+    );
+}
+

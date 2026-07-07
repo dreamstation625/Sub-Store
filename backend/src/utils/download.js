@@ -16,6 +16,7 @@ import { produceArtifact } from '@/restful/sync';
 import PROXY_PREPROCESSORS from '@/core/proxy-utils/preprocessors';
 import { ProxyUtils } from '@/core/proxy-utils';
 import { runBackendRequestTask } from '@/utils/request-concurrency';
+import { fetchViaWssClient } from '@/utils/wss-relay-server';
 import {
     AGE_SECRET_KEY,
     decryptArmorIfPresent,
@@ -373,16 +374,26 @@ export default async function download(
             }\nTimeout: ${requestTimeout}\nProxy: ${proxy}\nInsecure: ${!!insecure}\nPreprocess: ${preprocess}\nURL: ${safeUrl}`,
         );
         try {
+            const relayNodeId = options?.relayNodeId;
             let { body, headers, statusCode } = await runBackendRequestTask(
                 () =>
-                    http.get({
-                        url,
-                        ...(proxy ? { proxy } : {}),
-                        ...(isLoon && proxy ? { node: proxy } : {}),
-                        ...(isQX && proxy ? { opts: { policy: proxy } } : {}),
-                        ...(proxy ? getPolicyDescriptor(proxy) : {}),
-                        ...(insecure ? insecure : {}),
-                    }),
+                    relayNodeId
+                        ? fetchViaWssClient(relayNodeId, {
+                              url,
+                              uac: userAgent,
+                              headers: customHeaders || {
+                                  'User-Agent': userAgent,
+                              },
+                              timeout: requestTimeout,
+                          })
+                        : http.get({
+                              url,
+                              ...(proxy ? { proxy } : {}),
+                              ...(isLoon && proxy ? { node: proxy } : {}),
+                              ...(isQX && proxy ? { opts: { policy: proxy } } : {}),
+                              ...(proxy ? getPolicyDescriptor(proxy) : {}),
+                              ...(insecure ? insecure : {}),
+                          }),
                 'download',
             );
             $.info(`statusCode: ${statusCode}`);

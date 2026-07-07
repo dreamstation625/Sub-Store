@@ -105,6 +105,7 @@ async function compareSub(req, res) {
                                 undefined,
                                 undefined,
                                 true,
+                                { relayNodeId: sub.relayNodeId },
                             );
                         } catch (err) {
                             errors[url] = err;
@@ -255,6 +256,7 @@ async function compareCollection(req, res) {
                                             undefined,
                                             undefined,
                                             true,
+                                            { relayNodeId: sub.relayNodeId },
                                         );
                                     } catch (err) {
                                         errors[url] = err;

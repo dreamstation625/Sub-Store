@@ -32,6 +32,7 @@ import registerLogRoutes from './logs';
 import registerAgeRoutes from './age';
 import { consumeShareToken } from './token';
 import { AGE_PUBLIC_KEY } from '@/utils/age';
+import { startWssRelayServer } from '@/utils/wss-relay-server';
 
 export default function serve() {
     let port;
@@ -146,7 +147,8 @@ export default function serve() {
     registerLogRoutes($app);
     registerAgeRoutes($app);
 
-    $app.start();
+    const backendServer = $app.start();
+    startWssRelayServer(backendServer);
 
     if ($.env.isNode) {
         startArtifactCronJobs(syncArtifactItem);

@@ -101,6 +101,7 @@ export default function express({ substore: $, port, host }) {
                 const { address, port } = listener.address();
                 $.info(`[BACKEND] listening on ${address}:${port}`);
             });
+            return listener;
         };
         return app;
     }

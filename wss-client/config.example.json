@@ -6,5 +6,9 @@
   "maxBodyBytes": 5242880,
   "fetchTimeoutMs": 15000,
   "reconnectMinMs": 1000,
-  "reconnectMaxMs": 30000
+  "reconnectMaxMs": 30000,
+  "allowedProtocols": ["https:"],
+  "allowedHosts": [],
+  "allowPrivateNetwork": false,
+  "maxRedirects": 3
 }

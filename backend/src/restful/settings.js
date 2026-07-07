@@ -12,6 +12,10 @@ import {
     AGE_SECRET_KEY,
     normalizeAgeSecretKeyConfig,
 } from '@/utils/age';
+import {
+    isWssRelayAdminRequest,
+    listWssRelayClients,
+} from '@/utils/wss-relay-server';
 
 const ARTIFACT_STORE_SETTING_KEYS = [
     'gistToken',
@@ -67,6 +71,29 @@ export default function register($app) {
     const settings = $.read(SETTINGS_KEY);
     if (!settings) $.write({}, SETTINGS_KEY);
     $app.route('/api/settings').get(getSettings).patch(updateSettings);
+    $app.get('/api/wss/clients', getWssClients);
+}
+
+function getWssClients(req, res) {
+    if (!isWssRelayAdminRequest(req)) {
+        failed(
+            res,
+            new RequestInvalidError(
+                'WSS_RELAY_ADMIN_REQUIRED',
+                'WSS relay clients are only visible to administrators',
+            ),
+            403,
+        );
+        return;
+    }
+    success(res, listWssRelayClients({ includeSensitive: true }));
+}
+
+function maskSensitiveSettings(settings = {}) {
+    const masked = { ...settings };
+    if (masked.wssRelayToken) masked.wssRelayToken = '***';
+    if (masked.wssRelayAdminToken) masked.wssRelayAdminToken = '***';
+    return masked;
 }
 
 async function getSettings(req, res) {
@@ -80,7 +107,7 @@ async function getSettings(req, res) {
         // await updateAvatar();
         if (!settings.artifactStore) await updateArtifactStore();
 
-        success(res, settings);
+        success(res, maskSensitiveSettings(settings));
     } catch (e) {
         $.error(`Failed to get settings: ${e.message ?? e}`);
         failed(
@@ -175,7 +202,7 @@ async function updateSettings(req, res) {
             // await updateAvatar();
             await updateArtifactStore();
         }
-        success(res, newSettings);
+        success(res, maskSensitiveSettings(newSettings));
     } catch (e) {
         $.error(`Failed to update settings: ${e.message ?? e}`);
         failed(
