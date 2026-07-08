@@ -8,7 +8,7 @@ WORKDIR /src/backend
 RUN corepack enable
 
 COPY backend/package.json backend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 COPY backend/ ./
 RUN pnpm run bundle:esbuild
