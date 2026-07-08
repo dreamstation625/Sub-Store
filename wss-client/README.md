@@ -63,7 +63,7 @@ Edit `config.json`:
 ```json
 {
   "wssUrl": "wss://sub-store.example.com/ws/relay",
-  "token": "change-me",
+  "token": "paste-wss-token-from-frontend",
   "clientId": "node-1",
   "clientName": "Node Relay 1",
   "maxBodyBytes": 5242880,
@@ -79,7 +79,7 @@ Edit `config.json`:
 
 Security defaults:
 
-- `token` is required.
+- `token` is required. The token is created from the Sub-Store frontend and saved in backend settings as `wssRelayToken`; it is not read from backend environment variables.
 - Only `https:` URLs are fetched by default.
 - Private, loopback, link-local, multicast, and reserved IP ranges are blocked by default.
 - Redirects are followed manually and each redirected URL is validated again.

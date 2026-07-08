@@ -1,4 +1,4 @@
-﻿import dns from 'node:dns/promises';
+import dns from 'node:dns/promises';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -17,7 +17,6 @@ if (typeof WebSocket === 'undefined') {
     throw new Error('Global WebSocket is unavailable. Please use Node.js 22+.');
 }
 
-new RelayClient(config).start();
 
 class RelayClient {
     constructor(config) {
@@ -82,7 +81,25 @@ class RelayClient {
             return;
         }
 
+        this.log(
+            `received fetch id=${message.id} url=${this.maskUrl(message.url)} ua=${
+                message.uac || message.userAgent || DEFAULT_UA
+            }`,
+        );
         const response = await this.handleFetch(message);
+        if (response.ok) {
+            this.log(
+                `fetch completed id=${message.id} status=${response.statusCode} bytes=${
+                    response.body?.length || 0
+                }`,
+            );
+        } else {
+            this.error(
+                `fetch failed id=${message.id} error=${
+                    response.error?.message || 'unknown error'
+                }`,
+            );
+        }
         this.send(ws, {
             type: 'fetch-result',
             id: message.id,
@@ -401,3 +418,5 @@ function isPrivateIPv6(address) {
     );
 }
 
+
+new RelayClient(config).start();

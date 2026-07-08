@@ -16,7 +16,7 @@ export default function express({ substore: $, port, host }) {
         'Content-Type': 'text/plain;charset=UTF-8',
         'Access-Control-Allow-Methods': 'POST,GET,OPTIONS,PATCH,PUT,DELETE',
         'Access-Control-Allow-Headers':
-            'Origin, X-Requested-With, Content-Type, Accept',
+            'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Sub-Store-Wss-Admin-Token',
         'X-Powered-By': isNode
             ? eval('process.env.SUB_STORE_X_POWERED_BY') || 'Sub-Store'
             : 'Sub-Store',

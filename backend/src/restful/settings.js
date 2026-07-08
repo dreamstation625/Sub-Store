@@ -13,6 +13,7 @@ import {
     normalizeAgeSecretKeyConfig,
 } from '@/utils/age';
 import {
+    ensureWssRelayToken,
     isWssRelayAdminRequest,
     listWssRelayClients,
 } from '@/utils/wss-relay-server';
@@ -72,6 +73,28 @@ export default function register($app) {
     if (!settings) $.write({}, SETTINGS_KEY);
     $app.route('/api/settings').get(getSettings).patch(updateSettings);
     $app.get('/api/wss/clients', getWssClients);
+    $app.post('/api/wss/token', createWssToken);
+}
+
+function createWssToken(req, res) {
+    const settings = $.read(SETTINGS_KEY) || {};
+    const hasToken = Boolean(settings.wssRelayToken);
+    const rotate = req.body?.rotate === true;
+
+    if (hasToken && !isWssRelayAdminRequest(req)) {
+        failed(
+            res,
+            new RequestInvalidError(
+                'WSS_RELAY_ADMIN_REQUIRED',
+                'Current WSS relay token is required to read or rotate the connection token',
+            ),
+            403,
+        );
+        return;
+    }
+
+    const token = ensureWssRelayToken({ rotate });
+    success(res, { token, rotated: hasToken && rotate });
 }
 
 function getWssClients(req, res) {

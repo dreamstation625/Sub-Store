@@ -1,6 +1,6 @@
-﻿{
+{
   "wssUrl": "wss://sub-store.example.com/ws/relay",
-  "token": "change-me",
+  "token": "paste-wss-token-from-frontend",
   "clientId": "node-1",
   "clientName": "Node Relay 1",
   "maxBodyBytes": 5242880,

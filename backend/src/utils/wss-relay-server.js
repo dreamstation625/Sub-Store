@@ -12,10 +12,8 @@ let relayServerStarted = false;
 export function startWssRelayServer(server, { path = '/ws/relay' } = {}) {
     if (!$.env.isNode || !server || relayServerStarted) return;
 
-    const token = getRelayToken();
-    if (!token) {
-        $.warn('[WSS RELAY] disabled: wssRelayToken or SUB_STORE_WSS_RELAY_TOKEN is required');
-        return;
+    if (!getRelayToken()) {
+        $.warn('[WSS RELAY] listening without token: create wssRelayToken from frontend before connecting clients');
     }
 
     relayServerStarted = true;
@@ -89,6 +87,15 @@ export function isWssRelayAdminRequest(req) {
     const token = getRelayAdminToken();
     if (!token) return false;
     return safeTokenEqual(getRequestToken(req), token);
+}
+
+export function ensureWssRelayToken({ rotate = false } = {}) {
+    const settings = $.read('settings') || {};
+    if (!rotate && settings.wssRelayToken) return settings.wssRelayToken;
+
+    settings.wssRelayToken = createSecureToken();
+    $.write(settings, 'settings');
+    return settings.wssRelayToken;
 }
 
 export async function fetchViaWssClient(clientId, request) {
@@ -336,17 +343,11 @@ function sendFrame(socket, payload, opcode = 0x1) {
 
 function getRelayToken() {
     const settings = $.read('settings') || {};
-    return settings.wssRelayToken || eval('process.env.SUB_STORE_WSS_RELAY_TOKEN');
+    return settings.wssRelayToken;
 }
 
 function getRelayAdminToken() {
-    const settings = $.read('settings') || {};
-    return (
-        settings.wssRelayAdminToken ||
-        settings.wssRelayToken ||
-        eval('process.env.SUB_STORE_WSS_RELAY_ADMIN_TOKEN') ||
-        eval('process.env.SUB_STORE_WSS_RELAY_TOKEN')
-    );
+    return getRelayToken();
 }
 
 function getRequestToken(req) {
@@ -376,6 +377,11 @@ function rejectUpgrade(socket, statusCode, message) {
 
 function createRequestId() {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createSecureToken() {
+    const crypto = eval('require("crypto")');
+    return crypto.randomBytes(32).toString('base64url');
 }
 
 function normalizePositiveInteger(value, fallback) {
