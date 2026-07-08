@@ -5,10 +5,10 @@ ARG NODE_VERSION=22.16.0
 FROM node:${NODE_VERSION}-alpine AS backend-builder
 WORKDIR /src/backend
 
-RUN corepack enable
+RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm@11.0.9
 
 COPY backend/package.json backend/pnpm-lock.yaml ./
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm config set dangerouslyAllowAllBuilds true && pnpm install --no-frozen-lockfile
 
 COPY backend/ ./
 RUN pnpm run bundle:esbuild
@@ -16,10 +16,10 @@ RUN pnpm run bundle:esbuild
 FROM node:${NODE_VERSION}-alpine AS frontend-builder
 WORKDIR /src/frontend
 
-RUN corepack enable
+RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm@11.0.9
 
 COPY --from=frontend .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm config set dangerouslyAllowAllBuilds true && pnpm install --frozen-lockfile
 
 COPY --from=frontend .env .env.production .env.development index.html tsconfig.json tsconfig.node.json vite.config.ts ./
 COPY --from=frontend public ./public
