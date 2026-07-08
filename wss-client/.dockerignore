@@ -1,0 +1,8 @@
+.git
+node_modules
+npm-debug.log*
+pnpm-debug.log*
+*.log
+
+# Keep local relay credentials out of the image build context.
+config.json
