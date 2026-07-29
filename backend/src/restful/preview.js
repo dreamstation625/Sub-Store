@@ -1,4 +1,4 @@
-import { InternalServerError } from './errors';
+﻿import { InternalServerError } from './errors';
 import { ProxyUtils } from '@/core/proxy-utils';
 import { findByName } from '@/utils/database';
 import { success, failed } from './response';
@@ -10,6 +10,7 @@ import {
     notifyIgnoreFailedRemoteSubFallback,
     resolveIgnoreFailedRemoteSubMode,
     shouldFallbackIgnoreFailedRemoteSub,
+    shouldNotifyIgnoreFailedRemoteSub,
 } from '@/restful/ignore-failed-remote-sub';
 import {
     prepareMihomoProfileContent,
@@ -35,11 +36,11 @@ async function previewFile(req, res) {
         let content = '';
         if (isMihomoConfigFile(file)) {
             content = await prepareMihomoProfileContent(file, {
-                notifyTitle: '🌍 Sub-Store 预览文件失败',
+                notifyTitle: '馃實 Sub-Store 棰勮鏂囦欢澶辫触',
             });
         } else {
             content = await resolveFileRawContent(file, {
-                notifyTitle: '🌍 Sub-Store 预览文件失败',
+                notifyTitle: '馃實 Sub-Store 棰勮鏂囦欢澶辫触',
             });
         }
         // parse proxies
@@ -82,14 +83,16 @@ async function compareSub(req, res) {
     try {
         const target = req.query.target || 'JSON';
         let content;
+        let sourceRaw;
         if (
             sub.source === 'local' &&
             !['localFirst', 'remoteFirst'].includes(sub.mergeSources)
         ) {
             content = sub.content;
+            sourceRaw = sub.content;
         } else {
             const errors = {};
-            content = await Promise.all(
+            const downloaded = await Promise.all(
                 sub.url
                     .split(/[\r\n]+/)
                     .map((i) => i.trim())
@@ -105,33 +108,35 @@ async function compareSub(req, res) {
                                 undefined,
                                 undefined,
                                 true,
-                                { relayNodeId: sub.relayNodeId },
+{ returnRaw: true, relayNodeId: sub.relayNodeId },
                             );
                         } catch (err) {
                             errors[url] = err;
                             $.error(
-                                `订阅 ${sub.name} 的远程订阅 ${maskAgeSecretInUrl(
+                                `璁㈤槄 ${sub.name} 鐨勮繙绋嬭闃?${maskAgeSecretInUrl(
                                     url,
-                                )} 发生错误: ${err}`,
+                                )} 鍙戠敓閿欒: ${err}`,
                             );
                             return '';
                         }
                     }),
             );
+            content = downloaded.map((i) => i.result ?? i);
+            sourceRaw = downloaded.map((i) => i.raw ?? i);
 
             if (Object.keys(errors).length > 0) {
-                const message = `订阅 ${
+                const message = `璁㈤槄 ${
                     sub.name
-                } 的远程订阅 ${formatAgeSafeUrls(
+                } 鐨勮繙绋嬭闃?${formatAgeSafeUrls(
                     errors,
-                )} 发生错误, 请查看日志`;
+                )} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
                 handleIgnoreFailedRemoteSubError({
                     mode,
                     message,
                     notify: () => {
                         $.notify(
-                            `🌍 Sub-Store 预览订阅失败`,
-                            `❌ ${sub.name}`,
+                            `馃實 Sub-Store 棰勮璁㈤槄澶辫触`,
+                            `鉂?${sub.name}`,
                             message,
                         );
                     },
@@ -139,8 +144,10 @@ async function compareSub(req, res) {
             }
             if (sub.mergeSources === 'localFirst') {
                 content.unshift(sub.content);
+                sourceRaw.unshift(sub.content);
             } else if (sub.mergeSources === 'remoteFirst') {
                 content.push(sub.content);
+                sourceRaw.push(sub.content);
             }
         }
         // parse proxies
@@ -161,6 +168,8 @@ async function compareSub(req, res) {
             sub.process || [],
             target,
             { [sub.name]: sub },
+            undefined,
+            sourceRaw,
         );
 
         // produce
@@ -172,14 +181,14 @@ async function compareSub(req, res) {
                 error: err,
                 notify: (error) => {
                     $.notify(
-                        `🌍 Sub-Store 预览订阅失败`,
-                        `❌ ${sub.name}`,
-                        `🤔 原因：${error.message ?? error}`,
+                        `馃實 Sub-Store 棰勮璁㈤槄澶辫触`,
+                        `鉂?${sub.name}`,
+                        `馃 鍘熷洜锛?{error.message ?? error}`,
                     );
                 },
             });
             $.error(
-                `订阅 ${sub.name} 预览启用兜底后返回空结果: ${
+                `璁㈤槄 ${sub.name} 棰勮鍚敤鍏滃簳鍚庤繑鍥炵┖缁撴灉: ${
                     err.message ?? err
                 }`,
             );
@@ -223,6 +232,7 @@ async function compareCollection(req, res) {
         }
         const results = {};
         const errors = {};
+        const rawResults = {};
         await Promise.all(
             subnames.map(async (name) => {
                 const sub = findByName(allSubs, name);
@@ -231,6 +241,7 @@ async function compareCollection(req, res) {
                 );
                 try {
                     let raw;
+                    let sourceRaw;
                     if (
                         sub.source === 'local' &&
                         !['localFirst', 'remoteFirst'].includes(
@@ -238,9 +249,10 @@ async function compareCollection(req, res) {
                         )
                     ) {
                         raw = sub.content;
+                        sourceRaw = sub.content;
                     } else {
                         const errors = {};
-                        raw = await Promise.all(
+                        const downloaded = await Promise.all(
                             sub.url
                                 .split(/[\r\n]+/)
                                 .map((i) => i.trim())
@@ -256,35 +268,37 @@ async function compareCollection(req, res) {
                                             undefined,
                                             undefined,
                                             true,
-                                            { relayNodeId: sub.relayNodeId },
+{ returnRaw: true, relayNodeId: sub.relayNodeId },
                                         );
                                     } catch (err) {
                                         errors[url] = err;
                                         $.error(
-                                            `订阅 ${
+                                            `璁㈤槄 ${
                                                 sub.name
-                                            } 的远程订阅 ${maskAgeSecretInUrl(
+                                            } 鐨勮繙绋嬭闃?${maskAgeSecretInUrl(
                                                 url,
-                                            )} 发生错误: ${err}`,
+                                            )} 鍙戠敓閿欒: ${err}`,
                                         );
                                         return '';
                                     }
                                 }),
                         );
+                        raw = downloaded.map((i) => i.result ?? i);
+                        sourceRaw = downloaded.map((i) => i.raw ?? i);
 
                         if (Object.keys(errors).length > 0) {
-                            const message = `订阅 ${
+                            const message = `璁㈤槄 ${
                                 sub.name
-                            } 的远程订阅 ${formatAgeSafeUrls(
+                            } 鐨勮繙绋嬭闃?${formatAgeSafeUrls(
                                 errors,
-                            )} 发生错误, 请查看日志`;
+                            )} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
                             handleIgnoreFailedRemoteSubError({
                                 mode: subMode,
                                 message,
                                 notify: () => {
                                     $.notify(
-                                        `🌍 Sub-Store 预览订阅失败`,
-                                        `❌ ${sub.name}`,
+                                        `馃實 Sub-Store 棰勮璁㈤槄澶辫触`,
+                                        `鉂?${sub.name}`,
                                         message,
                                     );
                                 },
@@ -292,8 +306,10 @@ async function compareCollection(req, res) {
                         }
                         if (sub.mergeSources === 'localFirst') {
                             raw.unshift(sub.content);
+                            sourceRaw.unshift(sub.content);
                         } else if (sub.mergeSources === 'remoteFirst') {
                             raw.push(sub.content);
+                            sourceRaw.push(sub.content);
                         }
                     }
                     // parse proxies
@@ -309,13 +325,19 @@ async function compareCollection(req, res) {
                     });
 
                     // apply processors
+                    const currentRaw = Array.isArray(sourceRaw)
+                        ? sourceRaw
+                        : [sourceRaw];
                     currentProxies = await ProxyUtils.process(
                         currentProxies,
                         sub.process || [],
                         'JSON',
                         { [sub.name]: sub, _collection: collection },
+                        undefined,
+                        currentRaw,
                     );
                     results[name] = currentProxies;
+                    rawResults[name] = currentRaw;
                 } catch (err) {
                     if (shouldFallbackIgnoreFailedRemoteSub(subMode)) {
                         notifyIgnoreFailedRemoteSubFallback({
@@ -323,45 +345,61 @@ async function compareCollection(req, res) {
                             error: err,
                             notify: (error) => {
                                 $.notify(
-                                    `🌍 Sub-Store 预览订阅失败`,
-                                    `❌ ${sub.name}`,
-                                    `🤔 原因：${error.message ?? error}`,
+                                    `馃實 Sub-Store 棰勮璁㈤槄澶辫触`,
+                                    `鉂?${sub.name}`,
+                                    `馃 鍘熷洜锛?{error.message ?? error}`,
                                 );
                             },
                         });
                         $.error(
-                            `订阅 ${sub.name} 在组合订阅预览中启用兜底后返回空结果: ${
+                            `璁㈤槄 ${sub.name} 鍦ㄧ粍鍚堣闃呴瑙堜腑鍚敤鍏滃簳鍚庤繑鍥炵┖缁撴灉: ${
                                 err.message ?? err
                             }`,
                         );
                         results[name] = [];
+                        rawResults[name] = [];
                         return;
                     }
 
                     errors[name] = err;
+                    rawResults[name] = undefined;
 
                     $.error(
-                        `❌ 处理组合订阅 ${collection.name} 中的子订阅: ${sub.name} 时出现错误：${err}！`,
+                        `鉂?澶勭悊缁勫悎璁㈤槄 ${collection.name} 涓殑瀛愯闃? ${sub.name} 鏃跺嚭鐜伴敊璇細${err}锛乣,
                     );
                 }
             }),
         );
 
         if (Object.keys(errors).length > 0) {
-            const message = `组合订阅 ${collection.name} 的子订阅 ${Object.keys(
+            const message = `缁勫悎璁㈤槄 ${collection.name} 鐨勫瓙璁㈤槄 ${Object.keys(
                 errors,
-            ).join(', ')} 发生错误, 请查看日志`;
-            handleIgnoreFailedRemoteSubError({
-                mode: collectionMode,
-                message,
-                notify: () => {
-                    $.notify(
-                        `🌍 Sub-Store 预览组合订阅失败`,
-                        `❌ ${collection.name}`,
-                        message,
-                    );
-                },
-            });
+            ).join(', ')} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
+            const notify = () => {
+                $.notify(
+                    `馃實 Sub-Store 棰勮缁勫悎璁㈤槄澶辫触`,
+                    `鉂?${collection.name}`,
+                    message,
+                );
+            };
+            const hasProcessedSubscriptions = Object.keys(results).length > 0;
+            if (
+                hasProcessedSubscriptions &&
+                shouldFallbackIgnoreFailedRemoteSub(collectionMode)
+            ) {
+                Object.keys(errors).forEach((name) => {
+                    rawResults[name] = [];
+                });
+                if (shouldNotifyIgnoreFailedRemoteSub(collectionMode)) {
+                    notify();
+                }
+            } else {
+                handleIgnoreFailedRemoteSubError({
+                    mode: collectionMode,
+                    message,
+                    notify,
+                });
+            }
         }
         // merge proxies with the original order
         const original = Array.prototype.concat.apply(
@@ -380,6 +418,8 @@ async function compareCollection(req, res) {
             collection.process || [],
             'JSON',
             { _collection: collection },
+            undefined,
+            rawResults,
         );
 
         success(res, { original, processed });
@@ -390,14 +430,14 @@ async function compareCollection(req, res) {
                 error: err,
                 notify: (error) => {
                     $.notify(
-                        `🌍 Sub-Store 预览组合订阅失败`,
-                        `❌ ${collection.name}`,
-                        `🤔 原因：${error.message ?? error}`,
+                        `馃實 Sub-Store 棰勮缁勫悎璁㈤槄澶辫触`,
+                        `鉂?${collection.name}`,
+                        `馃 鍘熷洜锛?{error.message ?? error}`,
                     );
                 },
             });
             $.error(
-                `组合订阅 ${collection.name} 预览启用兜底后返回空结果: ${
+                `缁勫悎璁㈤槄 ${collection.name} 棰勮鍚敤鍏滃簳鍚庤繑鍥炵┖缁撴灉: ${
                     err.message ?? err
                 }`,
             );

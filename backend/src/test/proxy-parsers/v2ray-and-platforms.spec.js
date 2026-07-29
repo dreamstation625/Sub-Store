@@ -19,7 +19,7 @@ describe('VMess and VLESS parser coverage', function () {
                 port: 443,
                 cipher: 'auto',
                 uuid: UUID,
-                udp: 'true',
+                udp: true,
                 tfo: 'true',
                 'skip-cert-verify': false,
             });
@@ -575,6 +575,20 @@ describe('VMess and VLESS parser coverage', function () {
                     },
                 },
             });
+        });
+
+        it('parses the first VLESS vcn as mihomo name-cert-verify', function () {
+            const proxy = parseOne(
+                `vless://${UUID}@vless-ws.example.com:443?type=ws&security=tls&vcn=${encodeURIComponent(
+                    'first.example.com, second.example.com',
+                )}#VLESS%20WS%20VCN`,
+            );
+
+            expect(proxy['name-cert-verify']).to.equal('first.example.com');
+            expect(proxy._vcn).to.deep.equal([
+                'first.example.com',
+                'second.example.com',
+            ]);
         });
 
         it('parses VLESS share ECH config into mihomo ech opts', function () {
@@ -2460,6 +2474,13 @@ describe('Platform raw-format parser coverage', function () {
                 },
             },
             {
+                title: 'parses non-boolean tls-verification as name-cert-verify',
+                input: `vless=qx-vless-verify-name.example.com:443,method=none,password=${UUID},obfs=wss,tls-verification=true.example.com,tag=QX VLESS Verify Name`,
+                expected: {
+                    'name-cert-verify': 'true.example.com',
+                },
+            },
+            {
                 title: 'parses shadowsocks over-tls lines without obfs-host',
                 input: 'shadowsocks=qx-ss-tls-no-host.example.com:443,method=aes-128-gcm,password=secret,obfs=over-tls,udp-relay=true,tag=QX SS Over TLS No Host',
                 expected: {
@@ -3820,6 +3841,58 @@ describe('Platform raw-format parser coverage', function () {
 
             for (const input of cases) {
                 expectSubset(parseOne(input), { alpn });
+            }
+        });
+
+        it('parses Surge server-cert-verify-name for TLS protocol lines', function () {
+            const cases = [
+                {
+                    input: `Surge VMess Verify Name = vmess,vmess-verify.example.com,443,username=${UUID},tls=true,vmess-aead=true,server-cert-verify-name=verify.example.com`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge Trojan Verify Name = trojan,trojan-verify.example.com,443,password=secret,server-cert-verify-name='verify.example.com'`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge HTTPS Verify Name = https,https-verify.example.com,443,sni=sni.example.com,server-cert-verify-name="verify.example.com"`,
+                    expected: {
+                        sni: 'sni.example.com',
+                        'name-cert-verify': 'verify.example.com',
+                    },
+                },
+                {
+                    input: `Surge H2 Verify Name = h2-connect,h2-verify.example.com,443,server-cert-verify-name='verify.example.com'`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge SOCKS5 Verify Name = socks5-tls,socks-verify.example.com,1080,server-cert-verify-name="verify.example.com"`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge AnyTLS Verify Name = anytls,anytls-verify.example.com,443,password=secret,server-cert-verify-name=verify.example.com`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge TrustTunnel Verify Name = trust-tunnel,trust-verify.example.com,443,server-cert-verify-name='verify.example.com'`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge TUIC Verify Name = tuic,tuic-verify.example.com,443,token=secret,server-cert-verify-name="verify.example.com"`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge TUIC v5 Verify Name = tuic-v5,tuic-v5-verify.example.com,443,uuid=${UUID},password=secret,server-cert-verify-name=verify.example.com`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+                {
+                    input: `Surge Hysteria2 Verify Name = hysteria2,hy2-verify.example.com,443,password=secret,server-cert-verify-name='verify.example.com'`,
+                    expected: { 'name-cert-verify': 'verify.example.com' },
+                },
+            ];
+
+            for (const { input, expected } of cases) {
+                expectSubset(parseOne(input), expected);
             }
         });
 

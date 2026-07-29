@@ -13,6 +13,7 @@ import {
 let $;
 let openApi;
 let download;
+let downloadFile;
 let resourceCache;
 let headersResourceCache;
 let originalRead;
@@ -49,7 +50,7 @@ describe('download github proxy regex', function () {
         ({
             default: headersResourceCache,
         } = require('@/utils/headers-resource-cache'));
-        ({ default: download } = require('@/utils/download'));
+        ({ default: download, downloadFile } = require('@/utils/download'));
         ageUtils = require('@/utils/age');
 
         originalRead = $.read.bind($);
@@ -207,6 +208,56 @@ describe('download github proxy regex', function () {
         expect(maxActiveRequests).to.equal(1);
     });
 
+    it('logs download failures before rejecting', async function () {
+        openApi.HTTP = () => ({
+            get: async () => {
+                throw new Error('request setup failed');
+            },
+        });
+
+        let error;
+        try {
+            await download('https://example.com/failing.txt');
+        } catch (e) {
+            error = e;
+        }
+
+        expect(error).to.be.instanceOf(Error);
+        expect(error.message).to.equal(
+            '无法下载 URL https://example.com/failing.txt: request setup failed',
+        );
+        expect(errorLogs).to.deep.equal([error.message]);
+    });
+
+    it('returns unpreprocessed raw content when requested', async function () {
+        responseBody = [
+            'proxies:',
+            '  - name: A',
+            '    type: ss',
+            '    server: example.com',
+            '    port: 443',
+            '    cipher: aes-128-gcm',
+            '    password: pass',
+            '',
+        ].join('\n');
+
+        const body = await download(
+            'https://example.com/clash.yaml',
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            true,
+            { returnRaw: true },
+        );
+
+        expect(body.raw).to.equal(responseBody);
+        expect(body.result).to.not.equal(responseBody);
+        expect(body.result).to.contain('proxies:\n');
+    });
+
     it('decrypts age-armored downloads without caching plaintext for unkeyed requests', async function () {
         const pair = await ageUtils.generateKeyPair();
         responseBody = await ageUtils.encryptArmor(
@@ -291,5 +342,44 @@ describe('download github proxy regex', function () {
         expect(errorLogs.join('\n')).to.not.contain(
             wrongPair['age-secret-key'],
         );
+    });
+
+    it('uses the Undici option that throws at the file redirect limit', async function () {
+        const undici = eval("require('undici')");
+        const originalAgent = undici.Agent;
+        const originalRedirect = undici.interceptors.redirect;
+        const originalRequest = undici.request;
+        let redirectOptions;
+        let error;
+
+        undici.Agent = class {
+            compose() {
+                return this;
+            }
+        };
+        undici.interceptors.redirect = (options) => {
+            redirectOptions = options;
+            return () => {};
+        };
+        undici.request = async () => ({ statusCode: 500 });
+
+        try {
+            await downloadFile(
+                'https://example.com/redirecting-file',
+                path.join(tempDir, 'redirecting-file'),
+            );
+        } catch (e) {
+            error = e;
+        } finally {
+            undici.Agent = originalAgent;
+            undici.interceptors.redirect = originalRedirect;
+            undici.request = originalRequest;
+        }
+
+        expect(error).to.be.instanceOf(Error);
+        expect(redirectOptions).to.deep.equal({
+            maxRedirections: 3,
+            throwOnMaxRedirect: true,
+        });
     });
 });

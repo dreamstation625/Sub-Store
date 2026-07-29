@@ -596,6 +596,13 @@ function vless(proxy) {
     if (proxy['tls-fingerprint']) {
         pcs = `&pcs=${encodeURIComponent(proxy['tls-fingerprint'])}`;
     }
+    let vcn = '';
+    const certNames = Array.isArray(proxy._vcn)
+        ? proxy._vcn.join(',')
+        : proxy['name-cert-verify'];
+    if (Array.isArray(proxy._vcn) || certNames) {
+        vcn = `&vcn=${encodeURIComponent(certNames)}`;
+    }
     let ech = '';
     const echConfigList = buildXrayEchConfigListFromMihomo(
         proxy['ech-opts'],
@@ -777,7 +784,7 @@ function vless(proxy) {
         proxy.port
     }?security=${encodeURIComponent(
         security,
-    )}${vlessTransport}${packetEncoding}${alpn}${allowInsecure}${pcs}${ech}${h2}${sni}${fp}${flow}${sid}${spx}${pbk}${mode}${extra}${pqv}${encryption}#${encodeURIComponent(
+    )}${vlessTransport}${packetEncoding}${alpn}${allowInsecure}${pcs}${vcn}${ech}${h2}${sni}${fp}${flow}${sid}${spx}${pbk}${mode}${extra}${pqv}${encryption}#${encodeURIComponent(
         proxy.name,
     )}`;
 }
@@ -1192,6 +1199,13 @@ export default function URI_Producer() {
                         proxy['tls-fingerprint'],
                     )}`;
                 }
+                let trojanVcn = '';
+                const trojanCertNames = Array.isArray(proxy._vcn)
+                    ? proxy._vcn.join(',')
+                    : proxy['name-cert-verify'];
+                if (Array.isArray(proxy._vcn) || trojanCertNames) {
+                    trojanVcn = `&vcn=${encodeURIComponent(trojanCertNames)}`;
+                }
                 let trojanAlpn = '';
                 if (proxy.alpn) {
                     trojanAlpn = `&alpn=${encodeURIComponent(
@@ -1234,7 +1248,7 @@ export default function URI_Producer() {
                     proxy.port
                 }?sni=${encodeURIComponent(proxy.sni || proxy.server)}${
                     proxy['skip-cert-verify'] ? '&allowInsecure=1' : ''
-                }${trojanTransport}${trojanAlpn}${trojanFp}${trojanPcs}${trojanSecurity}${trojanSid}${trojanPbk}${trojanSpx}${trojanMode}${trojanExtra}#${encodeURIComponent(
+                }${trojanTransport}${trojanAlpn}${trojanFp}${trojanPcs}${trojanVcn}${trojanSecurity}${trojanSid}${trojanPbk}${trojanSpx}${trojanMode}${trojanExtra}#${encodeURIComponent(
                     proxy.name,
                 )}`;
                 break;
@@ -1280,6 +1294,14 @@ export default function URI_Producer() {
                 }
                 if (proxy.tfo) {
                     hysteria2params.push(`fastopen=1`);
+                }
+                const hysteria2Ech = buildXrayEchConfigListFromMihomo(
+                    proxy['ech-opts'],
+                );
+                if (hysteria2Ech) {
+                    hysteria2params.push(
+                        `ech=${encodeURIComponent(hysteria2Ech)}`,
+                    );
                 }
                 result = `hysteria2://${encodeURIComponent(proxy.password)}@${
                     proxy.server

@@ -1,11 +1,11 @@
 function operator(proxies = [], targetPlatform, context) {
   // 支持快捷操作 不一定要写一个 function
-  // 可参考 https://t.me/zhetengsha/970
-  // https://t.me/zhetengsha/1009
+  // 可参考 https://telegram.me/zhetengsha/970
+  // https://telegram.me/zhetengsha/1009
 
   // proxies 为传入的内部节点数组
   // 可在预览界面点击节点查看 JSON 结构 或查看 `target=JSON` 的通用订阅
-  // 1. 结构大致参考了 Clash.Meta(mihomo), 可参考 mihomo 的文档, 例如 `xudp`, `smux` 都可以自己设置. 但是有私货, 下面是我能想起来的一些私货. 顺便说一下, 关于 mihomo 不支持的协议, 其实也可以用 JSON/JSON5/YAML 格式来输入, 写法可参考使用 includeUnsupportedProxy 参数或开启 包含官方/商店版不支持的协议 开关时的 mihomo 输出内容, 例如 NaiveProxy 输入写法 (https://t.me/zhetengsha/4308)
+  // 1. 结构大致参考了 Clash.Meta(mihomo), 可参考 mihomo 的文档, 例如 `xudp`, `smux` 都可以自己设置. 但是有私货, 下面是我能想起来的一些私货. 顺便说一下, 关于 mihomo 不支持的协议, 其实也可以用 JSON/JSON5/YAML 格式来输入, 写法可参考使用 includeUnsupportedProxy 参数或开启 包含官方/商店版不支持的协议 开关时的 mihomo 输出内容, 例如 NaiveProxy 输入写法 (https://telegram.me/zhetengsha/4308)
   // 2. `_no-resolve` 为不解析域名
   // 3. 域名解析后 会多一个 `_resolved` 字段, 表示是否解析成功
   // 4. 域名解析后会有`_IPv4`, `_IPv6`, `_IP`(若有多个步骤, 只取第一次成功的 v4 或 v6 数据), `_IP4P`(若解析类型为 IPv6 且符合 IP4P 类型, 将自动转换), `_domain` 字段, `_resolved_ips` 为解析出的所有 IP
@@ -21,7 +21,7 @@ function operator(proxies = [], targetPlatform, context) {
   //    输出到 Clash/Stash 时, 会过滤掉配置了前置代理的节点, 并提示使用对应的功能.
   // 9. `trojan`, `tuic`, `hysteria`, `hysteria2`, `juicity` 会在解析时设置 `tls`: true (会使用 tls 类协议的通用逻辑),  输出时删除
   // 10. `sni` 在某些协议里会自动与 `servername` 转换
-  // 11. 读取节点的 ca-str 和 _ca (后端文件路径) 字段, 自动计算 fingerprint (参考 https://t.me/zhetengsha/1512)
+  // 11. 读取节点的 ca-str 和 _ca (后端文件路径) 字段, 自动计算 fingerprint (参考 https://telegram.me/zhetengsha/1512)
   // 12. 以 Surge 为例, 最新的参数一般我都会跟进, 以 Surge 文档为例, 一些常用的: TUIC/Hysteria 2 的 `ecn`, Snell 的 `reuse` 连接复用, QUIC 策略 block-quic`, Hysteria 2 下载带宽 `down`
   //     Surge 的 `private-key`/`client-cert` 对应内部字段 `keystore-private-key`/`keystore-client-cert`, 值都是 Surge `[Keystore]` 里的密钥库条目名, 不是证书/密钥内容或本地路径
   //     例如: $server['keystore-private-key'] = 'ssh-key-name' 输出 Surge SSH 时会生成 private-key="ssh-key-name"
@@ -39,7 +39,7 @@ function operator(proxies = [], targetPlatform, context) {
   // 21. 2.21.59 开始, `sing-box` 支持使用 `ech-opts` 结构设置 `tls` 的 `ech`. 参考 https://github.com/sub-store-org/Sub-Store/pull/563/changes 基本沿用 mihomo 风格, mihomo 部分字段自动转换. URI `ech` 与 mihomo `ech-opts` 会互转: base64 ECHConfigList 使用 `ech-opts.config`; Xray 的 DNS server 写法(如 `https://1.1.1.1/dns-query` 或 `example.com+https://1.1.1.1/dns-query`)会把 DNS server 放到 `ech-opts._dns`, 显式查询域名放到 `ech-opts.query-server-name`. mihomo 不支持在 ech-opts 中配置 ECH DNS. 如需跟节点 ECH 配置一致, 请在 mihomo 配置文件里设置, 可参考: `dns["nameserver-policy"]["cloudflare-ech.com"] = ["https://dns.alidns.com/dns-query"]` . 反向输出 URI 时, 可设置 `ech-opts._dns` 来拼回 `ech`; 如果只设置 `query-server-name` 且未设置 `_dns`, 默认使用 `https://dns.alidns.com/dns-query` 并输出 warn 日志, 自定义 root DNS 请设置 `ech-opts._dns`. XHTTP `download-settings` 里嵌套的 TLS ECH 同样支持, 其中 `echForceQuery`/`echSockopt` 分别对应 `ech-opts._force-query`/`ech-opts._sockopt`, 嵌套 DNS 可设置 `xhttp-opts.download-settings.ech-opts._dns`
   // 22. `sing-box` 支持使用完整的 `_curve_preferences` 结构设置 `tls` 的 `curve_preferences`
   // 23. `interface-name` 指定流量出站接口 只给 Surge 用的话, `interface` 也可以
-  // 24. Surge for macOS 可手动指定链接参数 target=SurgeMac 或在 同步配置 中指定 SurgeMac 来启用 mihomo 支援 Surge 本身不支持的协议, 详见 https://t.me/zhetengsha/1735 . 设置节点字段 `_mihomoExternal` 为 `true` 可强制指定使用 mihomo External Proxy Program 输出该节点. 节点字段 _exec 为 mihomo 路径, 默认 /usr/local/bin/mihomo; 节点字段 _localPort 端口为初始端口号, 逐个递减, 默认为 65535. _merge 为开启仅一个 mihomo 进程+多个 listeners 的模式, 此时仅有一个 mihomo External Proxy Program, 节点会转成 SOCKS5, _mergeName 可设置这个 mihomo 节点的名字(默认为 mihomo merged); _config 对象可覆盖默认配置, _defaultNameserver(默认为 [ '180.76.76.76', '52.80.52.52', '119.28.28.28', '223.6.6.6' ]) 和 _nameserver (默认为 [ 'https://doh.pub/dns-query', 'https://dns.alidns.com/dns-query', 'https://doh-pure.onedns.net/dns-query' ]) 为数组 用于自定义 mihomo 的 default-nameserver 和 nameserver
+  // 24. Surge for macOS 可手动指定链接参数 target=SurgeMac 或在 同步配置 中指定 SurgeMac 来启用 mihomo 支援 Surge 本身不支持的协议, 详见 https://telegram.me/zhetengsha/1735 . 设置节点字段 `_mihomoExternal` 为 `true` 可强制指定使用 mihomo External Proxy Program 输出该节点. 节点字段 _exec 为 mihomo 路径, 默认 /usr/local/bin/mihomo; 节点字段 _localPort 端口为初始端口号, 逐个递减, 默认为 65535. _merge 为开启仅一个 mihomo 进程+多个 listeners 的模式, 此时仅有一个 mihomo External Proxy Program, 节点会转成 SOCKS5, _mergeName 可设置这个 mihomo 节点的名字(默认为 mihomo merged); _config 对象可覆盖默认配置, _defaultNameserver(默认为 [ '180.76.76.76', '52.80.52.52', '119.28.28.28', '223.6.6.6' ]) 和 _nameserver (默认为 [ 'https://doh.pub/dns-query', 'https://dns.alidns.com/dns-query', 'https://doh-pure.onedns.net/dns-query' ]) 为数组 用于自定义 mihomo 的 default-nameserver 和 nameserver
   // 25. VLESS xhttp URI 的 extra 默认会拆成两部分处理: mihomo 已支持的字段会解析到节点的结构化字段并在输出 URI 时重新组装; extra 里 mihomo 还不支持的字段只会保存在 `_extra_unsupported` 对象里. 输出 URI 时会用“当前结构化字段 + _extra_unsupported”一起构造 extra, 这样既不会让旧 raw extra 覆盖后来修改过的 mihomo 字段, 也能避免 VLESS URI -> VLESS URI 的流程里把暂不支持的 extra 字段丢掉. 但如果节点上显式设置了 `_extra`, 且它是字符串或普通对象, 那么输出 URI 时 extra 会直接使用 `_extra` (对象会自动转成 JSON 字符串), 不再重组结构化字段. 这是为了方便手动自定义 extra, 不用再一个个同步那些本来会影响 extra 的其它字段
   // 修改/设置 extra 举例:
   // 如果是你写的全是 mihomo 已经支持的格式 就直接按 mihomo 的设置
@@ -55,7 +55,8 @@ function operator(proxies = [], targetPlatform, context) {
   // 30. Loon 支持使用 `_loon_tls_profile` 设置 `tls-profile` 字段('default', 'chrome', 'ios18', 'ios26'), 否则则使用 client-fingerprint 自动转换部分对应的值
   // 31. `shadow-tls-password`/`shadow-tls-sni`/`shadow-tls-version` 这套旧字段已废弃. 请使用 `plugin: 'shadow-tls'` 和 `plugin-opts: { password, host, version }`
   // 32. mihomo 中 Snell shadow-tls 字段与 ss shadow-tls 字段不同, 使用的是 obfs-opts 而不是 plugin+plugin-opts, 不能与 obfs http/tls 共存. Sub-Store 内部有字段转换, 建议直接使用单行 Surge 格式 `1=snell,a.com,443,version=4,psk="1",obfs=http,obfs-host=a.com,shadow-tls-password="1",shadow-tls-sni=a.com,shadow-tls-version=3,alpn="http/1.1,h2",reuse=true` . 若想使用 JSON/JSON5/YAML 单行格式输入, 可使用 `{ "name": "1", "server": "a.com", "port": 443, "psk": "1", "version": 4, "reuse": true, "type": "snell", "obfs-opts": { "mode": "http", "host": "a.com" }, "plugin": "shadow-tls", "plugin-opts": { "host": "a.com", "password": "1", "version": 3, "alpn": [ "http/1.1", "h2" ] } }`
-  // 33. sing-box Snell 出站默认允许 version 4/5/6, 其中 version 5 会按 sing-box 行为输出成 version 4. 开启“含不支持的协议”时保留 version 1/2/3/4/5/6. 节点上的 `_userkey` 会输出为 sing-box 的 `userkey`
+  // 33. sing-box Snell 出站默认允许 version 4/5/6, 其中 version 5 会按 sing-box 行为输出成 version 4. 开启“含不支持的协议”时保留 version 1/2/3/4/5/6, 并支持 version 6 通过节点字段 `quic-proxy-mode` 设置 `quic_proxy_mode`. 节点上的 `_userkey` 会输出为 sing-box 的 `userkey`
+  // 34. VLESS/Trojan URI 的 `vcn` 对应 mihomo 的 `name-cert-verify`. Xray-core 支持用逗号分隔多个 name, mihomo 只支持一个, 因此输入时取第一个有效值, 同时用 `_vcn` 数组保留全部有效值; 输出 URI 时优先用 `_vcn` 还原为 `vcn`, 没有 `_vcn` 时才使用 `name-cert-verify`. 若想设置为其他值, 可使用脚本操作设置, 例如 `$server["name-cert-verify"] = $server._vcn?.[1] || $server._vcn?.[0]`
 
   // require 为 Node.js 的 require, 在 Node.js 运行环境下 可以用来引入模块
   // 例如在 Node.js 环境下, 将文件内容写入 /tmp/1.txt 文件
@@ -144,7 +145,7 @@ function operator(proxies = [], targetPlatform, context) {
   // const obj = JSON.parse(body)
 
   // scriptResourceCache 缓存
-  // 可参考 https://t.me/zhetengsha/1003
+  // 可参考 https://telegram.me/zhetengsha/1003
   // const cache = scriptResourceCache
   // 写入
   // 第三个参数为自定义过期时间(单位: 毫秒)
@@ -191,7 +192,7 @@ function operator(proxies = [], targetPlatform, context) {
   // DOMAIN_RESOLVERS 为内置域名解析, 详见 backend/src/core/proxy-utils/processors/index.js
 
   // ProxyUtils 为节点处理工具
-  // 可参考 https://t.me/zhetengsha/1066
+  // 可参考 https://telegram.me/zhetengsha/1066
   // const ProxyUtils = {
   //     parse, // 订阅解析
   //     process, // 节点操作/文件操作
@@ -212,7 +213,7 @@ function operator(proxies = [], targetPlatform, context) {
   //         encrypt, // age 加密, 返回 armored 文本
   //         decrypt, // age 解密, 非 armored 文本会原样返回
   //     },
-  //     MMDB, // Node.js 环境 可用于模拟 Surge/Loon 的 $utils.ipasn, $utils.ipaso, $utils.geoip. 具体见 https://t.me/zhetengsha/1269
+  //     MMDB, // Node.js 环境 可用于模拟 Surge/Loon 的 $utils.ipasn, $utils.ipaso, $utils.geoip. 具体见 https://telegram.me/zhetengsha/1269
   //     isValidUUID, // 辅助判断是否为有效的 UUID
   //     doh, // DNS over HTTPS 解析, 源码见 backend/src/utils/dns.js, 使用参考本项目里调用方式 backend/src/core/proxy-utils/processors/index.js
   //     Buffer, // https://github.com/feross/buffer
@@ -222,7 +223,7 @@ function operator(proxies = [], targetPlatform, context) {
   // }
   //  为兼容 https://github.com/xishang0128/sparkle 的 JavaScript 覆写, 也可以直接使用 `b64d`(Base64 解码), `b64e`(Base64 编码), `Buffer`, `yaml`(简单兼容了下 `yaml.parse` 和 `yaml.stringify`)
 
-  // 如果只是为了快速修改或者筛选 可以参考 脚本操作支持节点快捷脚本 https://t.me/zhetengsha/970 和 脚本筛选支持节点快捷脚本 https://t.me/zhetengsha/1009
+  // 如果只是为了快速修改或者筛选 可以参考 脚本操作支持节点快捷脚本 https://telegram.me/zhetengsha/970 和 脚本筛选支持节点快捷脚本 https://telegram.me/zhetengsha/1009
   // ⚠️ 注意: 函数式(即本文件这样的 function operator() {}) 和快捷操作(下面使用 $server) 只能二选一
   // 示例: 给节点名添加前缀
   // $server.name = `[${ProxyUtils.getISO($server.name)}] ${$server.name}`
@@ -277,9 +278,9 @@ function operator(proxies = [], targetPlatform, context) {
   // 2. sing-box
 
   // 但是一般不需要这样用, 可参考
-  // 1. https://t.me/zhetengsha/1111
-  // 2. https://t.me/zhetengsha/1070
-  // 3. https://t.me/zhetengsha/1241
+  // 1. https://telegram.me/zhetengsha/1111
+  // 2. https://telegram.me/zhetengsha/1070
+  // 3. https://telegram.me/zhetengsha/1241
 
   // let singboxProxies = await produceArtifact({
   //     type: 'subscription', // type: 'subscription' 或 'collection'
@@ -294,9 +295,9 @@ function operator(proxies = [], targetPlatform, context) {
   // 3. clash.meta
 
   // 但是一般不需要这样用, 可参考
-  // 1. https://t.me/zhetengsha/1111
-  // 2. https://t.me/zhetengsha/1070
-  // 3. https://t.me/zhetengsha/1234
+  // 1. https://telegram.me/zhetengsha/1111
+  // 2. https://telegram.me/zhetengsha/1070
+  // 3. https://telegram.me/zhetengsha/1234
 
   // let clashMetaProxies = await produceArtifact({
   //     type: 'subscription',
@@ -309,7 +310,7 @@ function operator(proxies = [], targetPlatform, context) {
   // })
 
   // 4. 一个比较折腾的方案: 在脚本操作中, 把内容同步到另一个 gist
-  // 见 https://t.me/zhetengsha/1428
+  // 见 https://telegram.me/zhetengsha/1428
   //
   // const content = ProxyUtils.produce([...proxies], platform)
 
@@ -338,7 +339,7 @@ function operator(proxies = [], targetPlatform, context) {
 
   // flowUtils 为机场订阅流量信息处理工具
   // 可参考:
-  // 1. https://t.me/zhetengsha/948
+  // 1. https://telegram.me/zhetengsha/948
 
   // context 为传入的上下文, 可在多个脚本中共享使用
   // 其中 env 为 环境信息, 包含运行版本和其他后端信息
@@ -359,6 +360,15 @@ function operator(proxies = [], targetPlatform, context) {
   // 脚本操作和修改响应(Response Transformer)各自有独立的 context.process 控制, 两者不互相跨
   // 脚本操作只控制后续非修改响应操作
   // 修改响应中设置 context.process 只控制后续修改响应操作
+
+  // context.raw 为原始订阅内容, 用于在脚本里读取处理前的输入
+  // 1. 单条订阅里的脚本: context.raw 一定是数组, 例如 ['原始订阅内容']
+  //    如果单条订阅配置了多个远程 URL, 或合并了本地内容, 会按实际来源顺序放进同一个数组
+  // 2. 组合订阅里的单条订阅脚本: context.raw 仍然是当前单条订阅自己的 raw 数组
+  // 3. 组合订阅自己的脚本: context.raw 是对象, key 为单条订阅 name, value 为该单条订阅的 raw 数组
+  //    例如 { 'sub-a': ['sub-a raw'], 'sub-b': ['sub-b raw 1', 'sub-b raw 2'] }
+  //    如果某个子订阅处理失败并启用失败静默/失败通知, 会保留该 key, value 为 undefined
+  //    如果启用静默兜底/通知兜底, 会保留该 key, value 为 []
 
   // 其中 source 为 订阅和组合订阅的数据, 有三种情况, 按需判断 (若只需要取订阅/组合订阅名称 直接用 `_subName` `_subDisplayName` `_collectionName` `_collectionDisplayName` 即可)
 

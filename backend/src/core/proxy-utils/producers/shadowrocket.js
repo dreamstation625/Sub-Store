@@ -3,6 +3,7 @@ import {
     isPresent,
     isShadowsocksOverTls,
     produceProxyListOutput,
+    restoreShadowTLSProxyOpts,
     supportsShadowsocksV2rayPluginMode,
 } from '@/core/proxy-utils/producers/utils';
 import {
@@ -30,7 +31,7 @@ export default function Shadowrocket_Producer() {
                     return false;
                 } else if (
                     proxy.type === 'snell' &&
-                    ![1, 2, 3, 4, 5].includes(proxy.version)
+                    ![1, 2, 3, 4, 5, 6].includes(proxy.version)
                 ) {
                     return false;
                 } else if (hasShadowrocketSnellShadowTlsObfsConflict(proxy)) {
@@ -45,6 +46,7 @@ export default function Shadowrocket_Producer() {
                         'naive',
                         'openvpn',
                         'gost-relay',
+                        'shadowquic',
                     ].includes(proxy.type)
                 ) {
                     return false;
@@ -57,6 +59,8 @@ export default function Shadowrocket_Producer() {
                 return true;
             })
             .map((proxy) => {
+                restoreShadowTLSProxyOpts(proxy);
+
                 if (proxy.type === 'vmess') {
                     // handle vmess aead
                     if (isPresent(proxy, 'aead')) {
@@ -151,8 +155,7 @@ export default function Shadowrocket_Producer() {
                             version: proxy['plugin-opts'].version,
                         };
                         if (proxy['plugin-opts'].alpn) {
-                            proxy['obfs-opts'].alpn =
-                                proxy['plugin-opts'].alpn;
+                            proxy['obfs-opts'].alpn = proxy['plugin-opts'].alpn;
                         }
                         delete proxy.plugin;
                         delete proxy['plugin-opts'];
@@ -170,6 +173,13 @@ export default function Shadowrocket_Producer() {
                             // delete proxy.sni;
                         }
                     }
+                } else if (
+                    ['anytls'].includes(proxy.type) &&
+                    proxy.reuse != null &&
+                    !proxy.reuse
+                ) {
+                    proxy['disable-reuse'] = true;
+                    delete proxy.reuse;
                 }
 
                 if (
@@ -207,9 +217,9 @@ export default function Shadowrocket_Producer() {
                         proxy['h2-opts']?.headers?.host ??
                         proxy['h2-opts']?.headers?.Host;
                     if (
-                        (isPresent(proxy, 'h2-opts.host') ||
-                            isPresent(proxy, 'h2-opts.headers.host') ||
-                            isPresent(proxy, 'h2-opts.headers.Host'))
+                        isPresent(proxy, 'h2-opts.host') ||
+                        isPresent(proxy, 'h2-opts.headers.host') ||
+                        isPresent(proxy, 'h2-opts.headers.Host')
                     ) {
                         proxy['h2-opts'].host = Array.isArray(host)
                             ? host

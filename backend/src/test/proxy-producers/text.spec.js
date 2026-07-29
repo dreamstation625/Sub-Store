@@ -32,6 +32,21 @@ function captureErrors(fn) {
 }
 
 describe('Proxy text producers', function () {
+    it('uses name-cert-verify as Quantumult X tls-verification', function () {
+        const output = produceExternal('QX', {
+            type: 'vless',
+            name: 'VLESS',
+            server: 'vless.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            'skip-cert-verify': true,
+            'name-cert-verify': 'verify.example.com',
+        });
+
+        expect(output).to.include('tls-verification=verify.example.com');
+    });
+
     it('produces Quantumult X shadowsocks over-tls lines from canonical tls nodes', function () {
         const output = produceExternal('QX', {
             type: 'ss',
@@ -875,12 +890,13 @@ describe('Proxy text producers', function () {
         const output = produceExternal('Loon', proxy);
 
         expect(output).to.equal(
-            'URI Hysteria2=Hysteria2,hy2.example.com,443,"secret",server-ports="1000,2000-3000,5000",hop-interval=30,tls-name=hy2.example.com,skip-cert-verify=false,fast-open=false',
+            'URI Hysteria2=Hysteria2,hy2.example.com,443,"secret",server-ports="1000,2000-3000,5000",hop-interval=30,tls-name=hy2.example.com,skip-cert-verify=false,fast-open=false,udp=true',
         );
     });
 
-    it('emits quoted Surge alpn for TLS protocol outputs', function () {
+    it('emits Surge alpn and server-cert-verify-name for TLS protocol outputs', function () {
         const alpn = ['http/1.1', 'h2', 'h3'];
+        const nameCertVerify = 'verify.example.com';
         const output = produceExternal('Surge', [
             {
                 type: 'vmess',
@@ -892,6 +908,7 @@ describe('Proxy text producers', function () {
                 alterId: 0,
                 tls: true,
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'trojan',
@@ -900,6 +917,7 @@ describe('Proxy text producers', function () {
                 port: 443,
                 password: 'secret',
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'http',
@@ -907,7 +925,9 @@ describe('Proxy text producers', function () {
                 server: 'https-alpn.example.com',
                 port: 443,
                 tls: true,
+                sni: 'sni.example.com',
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'h2-connect',
@@ -915,6 +935,7 @@ describe('Proxy text producers', function () {
                 server: 'h2-alpn.example.com',
                 port: 443,
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'socks5',
@@ -923,6 +944,7 @@ describe('Proxy text producers', function () {
                 port: 1080,
                 tls: true,
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'anytls',
@@ -931,6 +953,7 @@ describe('Proxy text producers', function () {
                 port: 443,
                 password: 'secret',
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'trusttunnel',
@@ -938,6 +961,7 @@ describe('Proxy text producers', function () {
                 server: 'trust-alpn.example.com',
                 port: 443,
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'tuic',
@@ -947,6 +971,7 @@ describe('Proxy text producers', function () {
                 uuid: UUID,
                 password: 'secret',
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
             {
                 type: 'hysteria2',
@@ -955,13 +980,25 @@ describe('Proxy text producers', function () {
                 port: 443,
                 password: 'secret',
                 alpn,
+                'name-cert-verify': nameCertVerify,
             },
         ]);
 
         expect(output.match(/alpn="http\/1\.1,h2,h3"/g)).to.have.length(9);
+        expect(
+            output.match(/server-cert-verify-name="verify\.example\.com"/g),
+        ).to.have.length(9);
+
+        const roundTripped = ProxyUtils.parse(output).find(
+            ({ name }) => name === 'Surge HTTPS ALPN',
+        );
+        expect(roundTripped).to.include({
+            sni: 'sni.example.com',
+            'name-cert-verify': nameCertVerify,
+        });
     });
 
-    it('omits Surge alpn for non-TLS outputs', function () {
+    it('omits Surge alpn and server-cert-verify-name for non-TLS outputs', function () {
         const output = produceExternal('Surge', [
             {
                 type: 'vmess',
@@ -971,6 +1008,7 @@ describe('Proxy text producers', function () {
                 uuid: UUID,
                 alterId: 0,
                 alpn: ['http/1.1', 'h2'],
+                'name-cert-verify': 'verify.example.com',
             },
             {
                 type: 'http',
@@ -978,6 +1016,7 @@ describe('Proxy text producers', function () {
                 server: 'http-plain-alpn.example.com',
                 port: 80,
                 alpn: ['http/1.1', 'h2'],
+                'name-cert-verify': 'verify.example.com',
             },
             {
                 type: 'socks5',
@@ -985,10 +1024,12 @@ describe('Proxy text producers', function () {
                 server: 'socks-plain-alpn.example.com',
                 port: 1080,
                 alpn: ['http/1.1', 'h2'],
+                'name-cert-verify': 'verify.example.com',
             },
         ]);
 
         expect(output).to.not.include('alpn=');
+        expect(output).to.not.include('server-cert-verify-name=');
     });
 
     it('produces Surge TUIC v5 lines with port hopping', function () {
@@ -1385,8 +1426,8 @@ describe('Proxy text producers', function () {
         const output = ProxyUtils.produce(proxies, 'Surge', 'external');
 
         expect(output.split('\n')).to.deep.equal([
-            `Surge H2 Round Trip=h2-connect,h2.example.com,443,headers="X-Padding:"<random-string(16-32)>"",max-streams=1,sni="sni.example.com"`,
-            `Surge Trust Round Trip=trust-tunnel,trust.example.com,443,username="user",password="pass",headers="X-Client:"Surge"",max-streams=3,sni="sni.example.com"`,
+            `Surge H2 Round Trip=h2-connect,h2.example.com,443,headers="X-Padding:"<random-string(16-32)>"",max-streams=1,sni="sni.example.com",udp-relay=true`,
+            `Surge Trust Round Trip=trust-tunnel,trust.example.com,443,username="user",password="pass",headers="X-Client:"Surge"",max-streams=3,sni="sni.example.com",udp-relay=true`,
         ]);
     });
 
@@ -1607,6 +1648,47 @@ describe('Proxy text producers', function () {
         expect(output).to.equal(
             'Surfboard Hysteria2=hysteria2,hy2.example.com,443,password="secret",port-hopping="8443;8445-8447",port-hopping-interval=30,sni="peer.example.com",skip-cert-verify=true,download-bandwidth=100,udp-relay=true',
         );
+    });
+
+    it('produces Surfboard TUIC v5 lines', function () {
+        const output = produceExternal('Surfboard', {
+            type: 'tuic',
+            name: 'ProxyTuic',
+            server: '1.2.3.4',
+            port: 443,
+            uuid: UUID,
+            password: 'pwd',
+            alpn: ['h3'],
+            ports: '1234,5000-6000',
+            'hop-interval': 30,
+            'skip-cert-verify': true,
+            sni: 'example.com',
+            'tls-fingerprint':
+                'fac26f65c034829da42d740d23c4a7202475a3834f0ebaecae5f934adbbfd640',
+            udp: true,
+        });
+
+        expect(output).to.equal(
+            `ProxyTuic=tuic-v5,1.2.3.4,443,uuid=${UUID},password="pwd",alpn="h3",port-hopping="1234;5000-6000",port-hopping-interval=30,server-cert-fingerprint-sha256=fac26f65c034829da42d740d23c4a7202475a3834f0ebaecae5f934adbbfd640,sni="example.com",skip-cert-verify=true,udp-relay=true`,
+        );
+    });
+
+    it('does not produce legacy TUIC as Surfboard TUIC v5', function () {
+        const output = ProxyUtils.produce(
+            [
+                {
+                    type: 'tuic',
+                    name: 'Legacy TUIC',
+                    server: 'tuic.example.com',
+                    port: 443,
+                    token: 'secret',
+                },
+            ],
+            'Surfboard',
+            'external',
+        );
+
+        expect(output).to.equal('');
     });
 
     it('does not emit empty Surfboard Hysteria2 port hopping fields', function () {
@@ -2506,6 +2588,27 @@ describe('Proxy text producers', function () {
         );
     });
 
+    it('produces URI VLESS links with vcn from name-cert-verify', function () {
+        const output = produceExternal('URI', {
+            type: 'vless',
+            name: 'URI WS VCN',
+            server: 'vless.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            'name-cert-verify': 'edited.example.com',
+            _vcn: ['cert.example.com', 'backup.example.com'],
+            network: 'ws',
+            'ws-opts': {
+                path: '/ws',
+            },
+        });
+
+        expect(output).to.equal(
+            `vless://${UUID}@vless.example.com:443?security=tls&type=ws&path=%2Fws&vcn=cert.example.com%2Cbackup.example.com#URI%20WS%20VCN`,
+        );
+    });
+
     it('produces URI VLESS links with ech from mihomo ech opts config', function () {
         const output = produceExternal('URI', {
             type: 'vless',
@@ -2531,6 +2634,24 @@ describe('Proxy text producers', function () {
 
         expect(output).to.equal(
             `vless://${UUID}@vless.example.com:443?security=tls&type=ws&path=%2Fws&host=cdn.example.com&ech=ECHCONFIG&sni=sni.example.com#URI%20WS%20ECH`,
+        );
+    });
+
+    it('produces URI Hysteria2 links with ech from mihomo ech opts config', function () {
+        const output = produceExternal('URI', {
+            type: 'hysteria2',
+            name: 'URI Hysteria2 ECH',
+            server: 'hy2.example.com',
+            port: 443,
+            password: 'secret',
+            'ech-opts': {
+                enable: true,
+                config: 'ECHCONFIG',
+            },
+        });
+
+        expect(output).to.equal(
+            'hysteria2://secret@hy2.example.com:443?ech=ECHCONFIG#URI%20Hysteria2%20ECH',
         );
     });
 
@@ -5061,6 +5182,24 @@ describe('Proxy text producers', function () {
 
         expect(output).to.equal(
             'trojan://secret@trojan.example.com:443?sni=sni.example.com&type=ws&path=%2Fws&host=cdn.example.com&pcs=fingerprint#URI%20Trojan%20PCS',
+        );
+    });
+
+    it('produces URI Trojan links with vcn from the sidecar', function () {
+        const output = produceExternal('URI', {
+            type: 'trojan',
+            name: 'URI Trojan VCN',
+            server: 'trojan.example.com',
+            port: 443,
+            password: 'secret',
+            tls: true,
+            sni: 'sni.example.com',
+            'name-cert-verify': 'edited.example.com',
+            _vcn: ['cert.example.com', 'backup.example.com'],
+        });
+
+        expect(output).to.equal(
+            'trojan://secret@trojan.example.com:443?sni=sni.example.com&vcn=cert.example.com%2Cbackup.example.com#URI%20Trojan%20VCN',
         );
     });
 

@@ -33,7 +33,6 @@ import { produceArtifact } from '@/restful/sync';
 import { getFlag, removeFlag, getISO, MMDB } from '@/utils/geo';
 import Gist from '@/utils/gist';
 import {
-    isPresent,
     isShadowsocksOverTls,
     normalizeWireGuardInterface,
 } from './producers/utils';
@@ -141,8 +140,15 @@ async function processFn(
     targetPlatform,
     source,
     $options,
+    raw,
 ) {
     let context = {};
+    if (raw !== undefined) {
+        context.raw =
+            Array.isArray(raw) || (raw !== null && typeof raw === 'object')
+                ? raw
+                : [raw];
+    }
     for (const item of operators) {
         if (isResponseTransformerType(item.type)) {
             $.log(
@@ -388,15 +394,6 @@ function produce(proxies, targetPlatform, type, opts = {}) {
     }
 
     const normalizedTarget = String(targetPlatform).toLowerCase();
-    const supportedShadowsocksOverTlsTargets = new Set([
-        'qx',
-        'quantumultx',
-        'shadowrocket',
-    ]);
-
-    const sni_off_supported = /Surge|SurgeMac|Shadowrocket/i.test(
-        targetPlatform,
-    );
 
     // filter unsupported proxies
     proxies = proxies.filter((proxy) => {
@@ -418,7 +415,11 @@ function produce(proxies, targetPlatform, type, opts = {}) {
             !supportsRootProxyHeaders(proxy, targetPlatform)
         ) {
             $.error(
-                `Target platform ${targetPlatform} does not support headers for ${getRootHeaderProxyLabel(proxy)} proxy ${proxy.name || `${proxy.server}:${proxy.port}`}. Proxy has been filtered.`,
+                `Target platform ${targetPlatform} does not support headers for ${getRootHeaderProxyLabel(
+                    proxy,
+                )} proxy ${
+                    proxy.name || `${proxy.server}:${proxy.port}`
+                }. Proxy has been filtered.`,
             );
             return false;
         }
@@ -426,7 +427,7 @@ function produce(proxies, targetPlatform, type, opts = {}) {
         if (
             !includeUnsupportedProxy &&
             isShadowsocksOverTls(proxy) &&
-            !supportedShadowsocksOverTlsTargets.has(normalizedTarget)
+            !['qx', 'quantumultx', 'shadowrocket'].includes(normalizedTarget)
         ) {
             return false;
         }
@@ -507,13 +508,20 @@ function produce(proxies, targetPlatform, type, opts = {}) {
             proxy.name = `${proxy.type} ${proxy.server}:${proxy.port}`;
         }
         if (proxy['disable-sni']) {
-            if (sni_off_supported) {
+            if (
+                ['surge', 'surgemac', 'shadowrocket'].includes(normalizedTarget)
+            ) {
                 proxy.sni = 'off';
-            } else if (!['tuic'].includes(proxy.type)) {
+            } else if (
+                !['tuic'].includes(proxy.type) &&
+                !['sing-box', 'singbox'].includes(normalizedTarget)
+            ) {
+                // 目前 Sub-Store 里 sing-box 是靠 mihomo 转一次的. 会用到 disable-sni 转成 disable_sni. 是支持的
+                // 其他客户端行为可能不一致. mihomo 可设置为 ip, 此时会不发 sni
                 $.error(
-                    `Target platform ${targetPlatform} does not support sni off, proxy ${proxy.name} sni will be set to empty string instead.`,
+                    `Target platform ${targetPlatform} does not support sni off. As a workaround for mihomo, proxy ${proxy.name} sni will be set to IP instead`,
                 );
-                proxy.sni = '';
+                proxy.sni = isIP(proxy.server) ? proxy.server : '127.0.0.1';
                 // proxy['skip-cert-verify'] = true;
                 // delete proxy['tls-fingerprint'];
             }
@@ -522,7 +530,11 @@ function produce(proxies, targetPlatform, type, opts = {}) {
         // 处理 端口跳跃
         if (proxy.ports) {
             proxy.ports = String(proxy.ports);
-            if (!['ClashMeta'].includes(targetPlatform)) {
+            if (
+                !['meta', 'clashmeta', 'clash.meta', 'mihomo'].includes(
+                    normalizedTarget,
+                )
+            ) {
                 proxy.ports = proxy.ports.replace(/\//g, ',');
             }
             if (!proxy.port) {
@@ -616,9 +628,7 @@ function supportsRootProxyHeaders(proxy, targetPlatform) {
     }
 
     if (
-        ['clashmeta', 'clash.meta', 'meta', 'mihomo'].includes(
-            normalizedTarget,
-        )
+        ['clashmeta', 'clash.meta', 'meta', 'mihomo'].includes(normalizedTarget)
     ) {
         return proxy.type === 'http';
     }
@@ -709,6 +719,36 @@ function formatTransportPath(path) {
 }
 
 function lastParse(proxy) {
+    // normalize keys to lowercase for all -opts keys and their subkeys
+    // 通常来说够用了, 在重构之前暂不考虑引入更复杂的逻辑
+    const hasOwn = (value, key) =>
+        Object.prototype.hasOwnProperty.call(value, key);
+    const normalizeOpts = (value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        for (const key of Object.keys(value)) {
+            const normalizedKey = key.toLowerCase();
+            if (key !== normalizedKey) {
+                if (!hasOwn(value, normalizedKey)) {
+                    value[normalizedKey] = value[key];
+                }
+                delete value[key];
+            }
+        }
+    };
+    for (const key of Object.keys(proxy)) {
+        const normalizedKey = key.toLowerCase();
+        if (!normalizedKey.endsWith('-opts')) continue;
+        if (key !== normalizedKey) {
+            if (!hasOwn(proxy, normalizedKey)) {
+                proxy[normalizedKey] = proxy[key];
+            }
+            delete proxy[key];
+        }
+        normalizeOpts(proxy[normalizedKey]);
+    }
+    proxy.udp = ![false, 0, '0', 'false', 'off'].includes(
+        typeof proxy.udp === 'string' ? proxy.udp.toLowerCase() : proxy.udp,
+    );
     if (typeof proxy.cipher === 'string') {
         proxy.cipher = proxy.cipher.toLowerCase();
     }
@@ -769,6 +809,18 @@ function lastParse(proxy) {
             .replace(/\]$/, '');
     }
     if (
+        ['vmess', 'vless', 'trojan', 'anytls'].includes(proxy.type) &&
+        proxy['shadow-tls-opts']
+    ) {
+        proxy.plugin = 'shadow-tls';
+        proxy['plugin-opts'] = {
+            host: proxy.sni,
+            password: proxy['shadow-tls-opts'].password,
+            version: proxy['shadow-tls-opts'].version,
+        };
+        delete proxy['shadow-tls-opts'];
+    }
+    if (
         proxy.type === 'snell' &&
         proxy['obfs-opts']?.mode === 'shadow-tls' &&
         !proxy.plugin
@@ -787,6 +839,32 @@ function lastParse(proxy) {
             proxy['plugin-opts'].alpn = proxy.alpn;
         }
         delete proxy.alpn;
+    }
+    const xhttpDownloadSettings =
+        proxy.type === 'vless' && proxy.network === 'xhttp'
+            ? proxy['xhttp-opts']?.['download-settings']
+            : undefined;
+    if (xhttpDownloadSettings?.['shadow-tls-opts']) {
+        xhttpDownloadSettings.plugin = 'shadow-tls';
+        xhttpDownloadSettings['plugin-opts'] = {
+            host: xhttpDownloadSettings.servername,
+            password: xhttpDownloadSettings['shadow-tls-opts'].password,
+            version: xhttpDownloadSettings['shadow-tls-opts'].version,
+        };
+        delete xhttpDownloadSettings['shadow-tls-opts'];
+    }
+    if (
+        xhttpDownloadSettings?.plugin === 'shadow-tls' &&
+        xhttpDownloadSettings['plugin-opts']
+    ) {
+        if (
+            xhttpDownloadSettings.alpn &&
+            !xhttpDownloadSettings['plugin-opts'].alpn
+        ) {
+            xhttpDownloadSettings['plugin-opts'].alpn =
+                xhttpDownloadSettings.alpn;
+        }
+        delete xhttpDownloadSettings.alpn;
     }
     if (proxy.network === 'ws') {
         if (!proxy['ws-opts'] && (proxy['ws-path'] || proxy['ws-headers'])) {
@@ -854,6 +932,8 @@ function lastParse(proxy) {
             'trusttunnel',
             'h2-connect',
             'naive',
+            'masque',
+            'shadowquic',
         ].includes(proxy.type)
     ) {
         proxy.tls = true;
@@ -1024,6 +1104,9 @@ function lastParse(proxy) {
                 proxy[`${proxy.network}-opts`] || {};
             proxy[`${proxy.network}-opts`].path = ['/'];
         }
+    }
+    if (['anytls'].includes(proxy.type) && proxy['disable-reuse']) {
+        proxy.reuse = false;
     }
     if (['', 'off'].includes(proxy.sni)) {
         proxy['disable-sni'] = true;

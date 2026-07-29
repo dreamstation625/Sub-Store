@@ -84,6 +84,13 @@ describe('Proxy preprocessors', function () {
 
             expect(processor.test(raw)).to.equal(false);
         });
+
+        it('ignores invalid base64 containing an encoded proxy prefix', function () {
+            const processor = getPreprocessor('Base64 Pre-processor');
+            const raw = `🔥${Base64.encode('vmess://test')}`;
+
+            expect(processor.test(raw)).to.equal(false);
+        });
     });
 
     describe('Fallback Base64 preprocessor', function () {
@@ -97,9 +104,49 @@ describe('Proxy preprocessors', function () {
             expect(processor.parse(encoded)).to.equal(decoded);
             expect(processor.parse(invalid)).to.equal(invalid);
         });
+
+        it('ignores invalid base64 that decodes to a proxy prefix', function () {
+            const processor = getPreprocessor('Fallback Base64 Pre-processor');
+            const raw = `🔥${Base64.encode('vmess://test')}`;
+
+            expect(processor.test(raw)).to.equal(false);
+        });
     });
 
     describe('Clash preprocessor', function () {
+        it('accepts an empty proxies field', function () {
+            const processor = getPreprocessor('Clash Pre-processor');
+            const raw = `proxies:
+
+proxy-groups:
+  - name: Select
+    type: select
+    proxies:
+      - DIRECT
+`;
+
+            expect(processor.test(raw)).to.equal(true);
+            expect(processor.parse(raw)).to.equal('');
+            expect(processor.parse(raw, true)).to.equal('proxies:\n');
+        });
+
+        it('accepts a proxy groups array when proxies is invalid', function () {
+            const processor = getPreprocessor('Clash Pre-processor');
+            const raw = `proxies: invalid
+proxy-groups:
+  - test
+`;
+
+            expect(processor.test(raw)).to.equal(true);
+            expect(processor.parse(raw)).to.equal('');
+            expect(
+                processor.test('proxies: invalid\nproxy-groups: {}'),
+            ).to.equal(false);
+            expect(processor.test('proxies: invalid\nrules: []')).to.equal(
+                false,
+            );
+        });
+
         it('converts clash yaml proxies into json lines', function () {
             const processor = getPreprocessor('Clash Pre-processor');
             const raw = `proxies:

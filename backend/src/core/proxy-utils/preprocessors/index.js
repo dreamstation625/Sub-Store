@@ -67,6 +67,7 @@ function Base64Encoded() {
 
     const test = function (raw) {
         return (
+            Base64.isValid(raw) &&
             !/^\w+:\/\/\w+/im.test(raw) &&
             keys.some((k) => raw.indexOf(k) !== -1)
         );
@@ -89,7 +90,7 @@ function fallbackBase64Encoded() {
     const name = 'Fallback Base64 Pre-processor';
 
     const test = function (raw) {
-        return true;
+        return Base64.isValid(raw);
     };
     const parse = function (raw) {
         const decoded = Base64.decode(raw);
@@ -110,7 +111,10 @@ function Clash() {
     const test = function (raw) {
         if (!/proxies/.test(raw)) return false;
         const content = safeLoad(raw);
-        return content.proxies && Array.isArray(content.proxies);
+        return (
+            Array.isArray(content.proxies) ||
+            Array.isArray(content['proxy-groups'])
+        );
     };
     const parse = function (raw, includeProxies) {
         // Clash YAML format
@@ -120,7 +124,7 @@ function Clash() {
         const { proxies } = safeLoad(afterReplace);
         return (
             (includeProxies ? 'proxies:\n' : '') +
-            proxies
+            (Array.isArray(proxies) ? proxies : [])
                 .map((p) => {
                     return `${includeProxies ? '  - ' : ''}${JSON.stringify(
                         p,

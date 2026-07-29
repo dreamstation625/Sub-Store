@@ -576,6 +576,7 @@ const shadowTLSOutboundParser = (proxy = {}, pluginOpts) => {
             server_name: pluginOpts.host,
         },
     };
+    if (proxy['skip-cert-verify']) stPart.tls.insecure = true;
     if (fingerprint) {
         stPart.tls.utls = {
             enabled: true,
@@ -748,6 +749,8 @@ const snellParser = (proxy = {}, includeUnsupportedProxy = false) => {
     if (proxy._userkey) parsedProxy.userkey = proxy._userkey;
     if (outputVersion === 6) {
         if (proxy.mode) parsedProxy.mode = proxy.mode;
+        if (includeUnsupportedProxy && proxy['quic-proxy-mode'])
+            parsedProxy.quic_proxy_mode = !!proxy['quic-proxy-mode'];
     } else {
         if (
             proxy['obfs-opts']?.mode &&
@@ -1132,6 +1135,9 @@ const anytlsParser = (proxy = {}) => {
             `${proxy['min-idle-session']}`,
             10,
         );
+    if (proxy['disable-reuse'] != null) {
+        parsedProxy.disable_reuse = !!proxy['disable-reuse'];
+    }
     detourParser(proxy, parsedProxy);
     tlsParser(proxy, parsedProxy);
     ipVersionParser(proxy, parsedProxy);
@@ -1296,11 +1302,10 @@ export default function singbox_Producer() {
     const type = 'ALL';
     const produce = (proxies, type, opts = {}) => {
         const list = [];
-        const originalSnellShadowTLS = new Map(
+        const originalShadowTLS = new Map(
             proxies
                 .filter(
                     (proxy) =>
-                        proxy?.type === 'snell' &&
                         proxy?.plugin === 'shadow-tls' &&
                         proxy?.['plugin-opts'],
                 )
@@ -1320,16 +1325,76 @@ export default function singbox_Producer() {
         ClashMeta_Producer()
             .produce(proxies, 'internal', { 'include-unsupported-proxy': true })
             .map((proxy) => {
+                const listStart = list.length;
                 try {
-                    const originalShadowTLS = originalSnellShadowTLS.get(proxy);
-                    if (originalShadowTLS) {
-                        proxy.plugin = originalShadowTLS.plugin;
-                        proxy['plugin-opts'] = originalShadowTLS['plugin-opts'];
-                        if (originalShadowTLS['obfs-opts']) {
-                            proxy['obfs-opts'] = originalShadowTLS['obfs-opts'];
+                    const shadowTLS = originalShadowTLS.get(proxy);
+                    if (shadowTLS) {
+                        proxy.plugin = shadowTLS.plugin;
+                        proxy['plugin-opts'] = shadowTLS['plugin-opts'];
+                        if (shadowTLS['obfs-opts']) {
+                            proxy['obfs-opts'] = shadowTLS['obfs-opts'];
                         } else {
                             delete proxy['obfs-opts'];
                         }
+                    }
+                    const shadowTLSPluginOpts = getShadowTLSPluginOpts(proxy);
+                    const shadowTLSEnabled = Boolean(
+                        shadowTLSPluginOpts &&
+                            (shadowTLSPluginOpts.password ||
+                                (shadowTLSPluginOpts.version != null &&
+                                    Number(shadowTLSPluginOpts.version) !== 0)),
+                    );
+                    let streamShadowTLSOutbound;
+                    if (
+                        shadowTLSEnabled &&
+                        ['vmess', 'vless', 'trojan'].includes(proxy.type)
+                    ) {
+                        if (proxy['reality-opts']) {
+                            throw new Error(
+                                `Platform sing-box cannot chain ShadowTLS with Reality for proxy ${proxy.name}`,
+                            );
+                        }
+                        if (
+                            ['vmess', 'vless'].includes(proxy.type) &&
+                            proxy.network === 'h2'
+                        ) {
+                            throw new Error(
+                                `Platform sing-box cannot chain ShadowTLS with network h2 for proxy ${proxy.name}`,
+                            );
+                        }
+                        if (
+                            proxy.type === 'vless' &&
+                            proxy.flow === 'xtls-rprx-vision'
+                        ) {
+                            throw new Error(
+                                `Platform sing-box cannot chain ShadowTLS with flow xtls-rprx-vision for proxy ${proxy.name}`,
+                            );
+                        }
+
+                        const rawVersion = shadowTLSPluginOpts.version;
+                        const parsedVersion =
+                            typeof rawVersion === 'string' &&
+                            rawVersion.trim() === ''
+                                ? NaN
+                                : Number(rawVersion ?? 0);
+                        const version = parsedVersion === 0 ? 2 : parsedVersion;
+                        if (
+                            !Number.isInteger(version) ||
+                            ![1, 2, 3].includes(version)
+                        ) {
+                            throw new Error(
+                                `Platform sing-box does not support shadow-tls version ${rawVersion} for proxy ${proxy.name}`,
+                            );
+                        }
+                        streamShadowTLSOutbound = shadowTLSOutboundParser(
+                            proxy,
+                            { ...shadowTLSPluginOpts, version },
+                        );
+                    }
+                    if (proxy.type === 'anytls' && shadowTLSEnabled) {
+                        throw new Error(
+                            'Platform sing-box cannot replace AnyTLS TLS with ShadowTLS',
+                        );
                     }
                     if (['xhttp'].includes(proxy.network))
                         throw new Error(
@@ -1399,7 +1464,7 @@ export default function singbox_Producer() {
                                 );
                             }
                             break;
-                        case 'snell':
+                        case 'snell': {
                             list.push(
                                 snellParser(
                                     proxy,
@@ -1417,6 +1482,7 @@ export default function singbox_Producer() {
                                 );
                             }
                             break;
+                        }
                         case 'vmess':
                             if (
                                 !proxy.network ||
@@ -1497,8 +1563,26 @@ export default function singbox_Producer() {
                                 `Platform sing-box does not support proxy type: ${proxy.type}`,
                             );
                     }
+                    if (streamShadowTLSOutbound) {
+                        const outbound = list[listStart];
+                        outbound.detour = getShadowTLSTag(proxy);
+                        delete outbound.tls;
+                        list.push(streamShadowTLSOutbound);
+                    }
+                    if (
+                        opts['include-unsupported-proxy'] &&
+                        proxy['name-cert-verify']
+                    ) {
+                        for (let i = listStart; i < list.length; i++) {
+                            const outbound = list[i];
+                            if (outbound.tls)
+                                outbound.tls.certificate_server_name =
+                                    proxy['name-cert-verify'];
+                        }
+                    }
                 } catch (e) {
                     // console.log(e);
+                    list.length = listStart;
                     $.error(e.message ?? e);
                 }
             });

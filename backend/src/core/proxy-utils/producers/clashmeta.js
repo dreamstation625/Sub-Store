@@ -3,6 +3,7 @@ import {
     isPresent,
     normalizePluginMuxBooleanValue,
     produceProxyListOutput,
+    restoreShadowTLSProxyOpts,
     supportsShadowsocksV2rayPluginMode,
 } from '@/core/proxy-utils/producers/utils';
 import { isNotBlank, isPlainObject } from '@/utils';
@@ -76,11 +77,34 @@ export default function ClashMeta_Producer() {
                     return false;
                 } else if (
                     hasMihomoShadowTls(proxy) &&
-                    (!['ss', 'snell'].includes(proxy.type) ||
+                    (![
+                        'ss',
+                        'snell',
+                        'vmess',
+                        'vless',
+                        'trojan',
+                        'anytls',
+                    ].includes(proxy.type) ||
                         !isSupportedMihomoVersion(
                             getMihomoShadowTlsVersion(proxy),
-                            [1, 2, 3],
+                            ['ss', 'snell'].includes(proxy.type)
+                                ? [1, 2, 3]
+                                : [0, 1, 2, 3],
                         ))
+                ) {
+                    return false;
+                } else if (
+                    proxy.type === 'vless' &&
+                    proxy.network === 'xhttp' &&
+                    hasMihomoShadowTls(
+                        proxy['xhttp-opts']?.['download-settings'],
+                    ) &&
+                    !isSupportedMihomoVersion(
+                        getMihomoShadowTlsVersion(
+                            proxy['xhttp-opts']['download-settings'],
+                        ),
+                        [0, 1, 2, 3],
+                    )
                 ) {
                     return false;
                 } else if (hasMihomoSnellShadowTlsObfsConflict(proxy)) {
@@ -149,6 +173,8 @@ export default function ClashMeta_Producer() {
             })
             .map((proxy) => {
                 warnMihomoUnsupportedEchDnsFields(proxy, type);
+
+                restoreShadowTLSProxyOpts(proxy);
 
                 if (proxy['reality-opts'] && !proxy['client-fingerprint']) {
                     proxy['client-fingerprint'] = 'chrome';
@@ -252,6 +278,13 @@ export default function ClashMeta_Producer() {
                             ds['reality-opts'] = { 'public-key': '' };
                         }
                     }
+                } else if (
+                    ['anytls'].includes(proxy.type) &&
+                    proxy.reuse != null &&
+                    !proxy.reuse
+                ) {
+                    proxy['disable-reuse'] = true;
+                    delete proxy.reuse;
                 }
 
                 if (isPresent(proxy, 'plugin-opts.mux')) {
@@ -356,6 +389,8 @@ export default function ClashMeta_Producer() {
                         'anytls',
                         'trusttunnel',
                         'naive',
+                        'masque',
+                        'shadowquic',
                     ].includes(proxy.type)
                 ) {
                     delete proxy.tls;
@@ -456,7 +491,10 @@ function getMihomoShadowTlsOpts(proxy) {
     if (proxy?.plugin === 'shadow-tls' && proxy?.['plugin-opts']) {
         return proxy['plugin-opts'];
     }
-    if (proxy?.type === 'snell' && proxy?.['obfs-opts']?.mode === 'shadow-tls') {
+    if (
+        proxy?.type === 'snell' &&
+        proxy?.['obfs-opts']?.mode === 'shadow-tls'
+    ) {
         return proxy['obfs-opts'];
     }
     return undefined;

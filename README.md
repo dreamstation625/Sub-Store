@@ -67,7 +67,7 @@ Sub-Store also supports a configurable browser CORS allowlist for the backend AP
 
 ### Supported Input Formats
 
-[本地节点怎么写/How To Write A Local Node](https://t.me/zhetengsha/824)
+[本地节点怎么写/How To Write A Local Node](https://telegram.me/zhetengsha/824)
 
 > ⚠️ Do not use `Shadowrocket` or `NekoBox` to export URI and then import it as input. The URIs exported in this way may not be standard URIs. However, we have already supported some very common non-standard URIs (such as VMess, VLESS).
 
@@ -79,11 +79,11 @@ Sub-Store also supports a configurable browser CORS allowlist for the backend AP
   > Please note, HTTP(s) does not have a standard URI format, so it is not supported. Please use other formats.
 - [x] Clash Proxies YAML
 - [x] Clash Proxy JSON/JSON5/YAML(single line)
-  > [NaiveProxy](https://t.me/zhetengsha/4308)
+  > [NaiveProxy](https://telegram.me/zhetengsha/4308)
 - [x] QX (SS, SSR, VMess, Trojan, HTTP, SOCKS5, VLESS, AnyTLS)
 - [x] Loon (SS, SSR, VMess, Trojan, HTTP, SOCKS5, SOCKS5-TLS, WireGuard, VLESS, Hysteria 2, AnyTLS)
 - [x] Surge (Direct, SS, VMess, Trojan, HTTP, HTTPS, HTTP/2 CONNECT, SOCKS5, SOCKS5-TLS, AnyTLS, TrustTunnel, TUIC, Snell, Hysteria 2, SSH(Password authentication only), External Proxy Program(only for macOS), WireGuard(Surge to Surge))
-- [x] mihomo(Clash.Meta) Compatible (Direct, SS, SSR, VMess, Trojan, HTTP, SOCKS5, Snell, VLESS, WireGuard, Hysteria, Hysteria 2, TUIC, SSH, mieru, sudoku, AnyTLS, MASQUE, Tailscale, GOST Relay)
+- [x] mihomo(Clash.Meta) Compatible (Direct, SS, SSR, VMess, Trojan, HTTP, SOCKS5, Snell, VLESS, WireGuard, Hysteria, Hysteria 2, TUIC, SSH, mieru, sudoku, AnyTLS, MASQUE, Tailscale, GOST Relay, Shadow QUIC)
 
 Deprecated(The frontend doesn't show it, but the backend still supports it, with the query parameter `target=Clash`):
 
@@ -165,7 +165,10 @@ This project is under the GPL V3 LICENSE.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=sub-store-org/sub-store&type=Date)](https://star-history.com/#sub-store-org/sub-store&Date)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sub-store-org/Sub-Store/refs/heads/star-history/assets/my-star-history/star-history-dark.svg">
+  <img src="https://raw.githubusercontent.com/sub-store-org/Sub-Store/refs/heads/star-history/assets/my-star-history/star-history-light.svg" alt="Star History">
+</picture>
 
 ## Acknowledgements
 

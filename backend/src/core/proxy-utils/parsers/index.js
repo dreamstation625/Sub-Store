@@ -1883,6 +1883,11 @@ function URI_VLESS() {
             proxy['ech-opts'] = echOpts;
         }
         proxy['tls-fingerprint'] = getIfPresent(params.pcs);
+        proxy._vcn = params.vcn
+            ?.split(',')
+            .map((name) => name.trim())
+            .filter(Boolean);
+        proxy['name-cert-verify'] = proxy._vcn?.[0];
         proxy._h2 = /(TRUE)|1/i.test(params.h2);
 
         switch (`${params.packetEncoding || ''}`.trim().toLowerCase()) {
@@ -2244,6 +2249,12 @@ function URI_Hysteria2() {
         if (params.downmbps) {
             proxy.down = params.downmbps;
         }
+        const echOpts = buildMihomoEchOptsFromXrayFields({
+            echConfigList: params.ech,
+        });
+        if (echOpts) {
+            proxy['ech-opts'] = echOpts;
+        }
 
         return proxy;
     };
@@ -2524,6 +2535,7 @@ function Clash_All() {
         }
         if (
             ![
+                'shadowquic',
                 'gost-relay',
                 'openvpn',
                 'tailscale',
