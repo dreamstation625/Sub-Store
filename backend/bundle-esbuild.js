@@ -95,7 +95,8 @@ ${fs.readFileSync(path.join(__dirname, 'dist/sub-store.bundle.js'), {
     );
 })()
     .catch((e) => {
-        console.log(e);
+        console.error(e);
+        process.exitCode = 1;
     })
     .finally(() => {
         console.log('done');

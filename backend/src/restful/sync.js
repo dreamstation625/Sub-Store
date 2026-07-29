@@ -1,4 +1,4 @@
-﻿import $ from '@/core/app';
+import $ from '@/core/app';
 import {
     ARTIFACTS_KEY,
     COLLECTIONS_KEY,
@@ -98,7 +98,7 @@ async function downloadFileSources({
     proxy,
     noCache,
     ignoreFailedRemoteFile,
-    notifyTitle = '馃實 Sub-Store 澶勭悊鏂囦欢澶辫触',
+    notifyTitle = '🌍 Sub-Store 处理文件失败',
 }) {
     const errors = {};
     const urls = `${sourceUrl || ''}`
@@ -106,7 +106,7 @@ async function downloadFileSources({
         .map((i) => i.trim())
         .filter((i) => i.length);
     if (urls.length === 0) {
-        throw new Error(`鏂囦欢 ${file.name} 鏈厤缃繙绋嬫枃浠?URL`);
+        throw new Error(`文件 ${file.name} 未配置远程文件 URL`);
     }
 
     const raw = await Promise.all(
@@ -126,9 +126,9 @@ async function downloadFileSources({
             } catch (err) {
                 errors[url] = err;
                 $.error(
-                    `鏂囦欢 ${file.name} 鐨勮繙绋嬫枃浠?${maskAgeSecretInUrl(
+                    `文件 ${file.name} 的远程文件 ${maskAgeSecretInUrl(
                         url,
-                    )} 鍙戠敓閿欒: ${err}`,
+                    )} 发生错误: ${err}`,
                 );
                 return '';
             }
@@ -143,15 +143,15 @@ async function downloadFileSources({
     if (Object.keys(errors).length > 0) {
         if (!fileIgnoreFailedRemoteFile) {
             throw new Error(
-                `鏂囦欢 ${file.name} 鐨勮繙绋嬫枃浠?${formatAgeSafeUrls(
+                `文件 ${file.name} 的远程文件 ${formatAgeSafeUrls(
                     errors,
-                )} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎,
+                )} 发生错误, 请查看日志`,
             );
         } else if (fileIgnoreFailedRemoteFile === 'enabled') {
             $.notify(
                 notifyTitle,
-                `鉂?${file.name}`,
-                `杩滅▼鏂囦欢 ${formatAgeSafeUrls(errors)} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎,
+                `❌ ${file.name}`,
+                `远程文件 ${formatAgeSafeUrls(errors)} 发生错误, 请查看日志`,
             );
         }
     }
@@ -237,7 +237,7 @@ async function prepareMihomoProfileContent(file, sourceOptions = {}) {
             .map((i) => ProxyUtils.parse(i))
             .flat();
         if (proxies.length === 0) {
-            throw new Error(`鏂囦欢 ${file.name} 涓笉鍚湁鏁堣妭鐐筦);
+            throw new Error(`文件 ${file.name} 中不含有效节点`);
         }
         config.proxies = ProxyUtils.produce(
             proxies,
@@ -290,11 +290,11 @@ async function produceArtifact({
         if (name) {
             const allSubs = $.read(SUBS_KEY);
             sub = findByName(allSubs, name);
-            if (!sub) throw new Error(`鎵句笉鍒拌闃?${name}`);
+            if (!sub) throw new Error(`找不到订阅 ${name}`);
         } else if (subscription) {
             sub = subscription;
         } else {
-            throw new Error('鏈彁渚涜闃呭悕绉版垨璁㈤槄鏁版嵁');
+            throw new Error('未提供订阅名称或订阅数据');
         }
         const subIgnoreFailedRemoteSub = resolveIgnoreFailedRemoteSubMode(
             ignoreFailedRemoteSub,
@@ -328,14 +328,14 @@ async function produceArtifact({
                                     awaitCustomCache,
                                     noCache || sub.noCache,
                                     true,
-{ returnRaw: true, relayNodeId: sub.relayNodeId },
+                                    { returnRaw: true, relayNodeId: sub.relayNodeId },
                                 );
                             } catch (err) {
                                 errors[url] = err;
                                 $.error(
-                                    `璁㈤槄 ${sub.name} 鐨勮繙绋嬭闃?${maskAgeSecretInUrl(
+                                    `订阅 ${sub.name} 的远程订阅 ${maskAgeSecretInUrl(
                                         url,
-                                    )} 鍙戠敓閿欒: ${err}`,
+                                    )} 发生错误: ${err}`,
                                 );
                                 return '';
                             }
@@ -345,18 +345,18 @@ async function produceArtifact({
                 sourceRaw = downloaded.map((i) => i.raw ?? i);
 
                 if (Object.keys(errors).length > 0) {
-                    const message = `璁㈤槄 ${
+                    const message = `订阅 ${
                         sub.name
-                    } 鐨勮繙绋嬭闃?${formatAgeSafeUrls(
+                    } 的远程订阅 ${formatAgeSafeUrls(
                         errors,
-                    )} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
+                    )} 发生错误, 请查看日志`;
                     handleIgnoreFailedRemoteSubError({
                         mode: subIgnoreFailedRemoteSub,
                         message,
                         notify: () => {
                             $.notify(
-                                `馃實 Sub-Store 澶勭悊璁㈤槄澶辫触`,
-                                `鉂?${sub.name}`,
+                                `🌍 Sub-Store 处理订阅失败`,
+                                `❌ ${sub.name}`,
                                 message,
                             );
                         },
@@ -393,14 +393,14 @@ async function produceArtifact({
                                     awaitCustomCache,
                                     noCache || sub.noCache,
                                     true,
-{ returnRaw: true, relayNodeId: sub.relayNodeId },
+                                    { returnRaw: true, relayNodeId: sub.relayNodeId },
                                 );
                             } catch (err) {
                                 errors[url] = err;
                                 $.error(
-                                    `璁㈤槄 ${sub.name} 鐨勮繙绋嬭闃?${maskAgeSecretInUrl(
+                                    `订阅 ${sub.name} 的远程订阅 ${maskAgeSecretInUrl(
                                         url,
-                                    )} 鍙戠敓閿欒: ${err}`,
+                                    )} 发生错误: ${err}`,
                                 );
                                 return '';
                             }
@@ -410,18 +410,18 @@ async function produceArtifact({
                 sourceRaw = downloaded.map((i) => i.raw ?? i);
 
                 if (Object.keys(errors).length > 0) {
-                    const message = `璁㈤槄 ${
+                    const message = `订阅 ${
                         sub.name
-                    } 鐨勮繙绋嬭闃?${formatAgeSafeUrls(
+                    } 的远程订阅 ${formatAgeSafeUrls(
                         errors,
-                    )} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
+                    )} 发生错误, 请查看日志`;
                     handleIgnoreFailedRemoteSubError({
                         mode: subIgnoreFailedRemoteSub,
                         message,
                         notify: () => {
                             $.notify(
-                                `馃實 Sub-Store 澶勭悊璁㈤槄澶辫触`,
-                                `鉂?${sub.name}`,
+                                `🌍 Sub-Store 处理订阅失败`,
+                                `❌ ${sub.name}`,
                                 message,
                             );
                         },
@@ -457,16 +457,16 @@ async function produceArtifact({
                 sourceRaw,
             );
             if (proxies.length === 0) {
-                throw new Error(`璁㈤槄 ${name} 涓笉鍚湁鏁堣妭鐐筦);
+                throw new Error(`订阅 ${name} 中不含有效节点`);
             }
             // check duplicate
             const exist = {};
             for (const proxy of proxies) {
                 if (exist[proxy.name]) {
                     $.notify(
-                        '馃實 Sub-Store',
-                        `鈿狅笍 璁㈤槄 ${name} 鍖呭惈閲嶅鑺傜偣 ${proxy.name}锛乣,
-                        '璇蜂粩缁嗘娴嬮厤缃紒',
+                        '🌍 Sub-Store',
+                        `⚠️ 订阅 ${name} 包含重复节点 ${proxy.name}！`,
+                        '请仔细检测配置！',
                         {
                             'media-url':
                                 'https://cdn3.iconfinder.com/data/icons/seo-outline-1/512/25_code_program_programming_develop_bug_search_developer-512.png',
@@ -493,14 +493,14 @@ async function produceArtifact({
                 error: err,
                 notify: (error) => {
                     $.notify(
-                        `馃實 Sub-Store 澶勭悊璁㈤槄澶辫触`,
-                        `鉂?${sub.name}`,
-                        `馃 鍘熷洜锛?{error.message ?? error}`,
+                        `🌍 Sub-Store 处理订阅失败`,
+                        `❌ ${sub.name}`,
+                        `🤔 原因：${error.message ?? error}`,
                     );
                 },
             });
             $.error(
-                `璁㈤槄 ${sub.name} 鍚敤鍏滃簳鍚庤繑鍥炵┖缁撴灉: ${err.message ?? err}`,
+                `订阅 ${sub.name} 启用兜底后返回空结果: ${err.message ?? err}`,
             );
 
             return buildEmptySubscriptionOutput({
@@ -513,7 +513,7 @@ async function produceArtifact({
         const allSubs = $.read(SUBS_KEY);
         const allCols = $.read(COLLECTIONS_KEY);
         const collection = findByName(allCols, name);
-        if (!collection) throw new Error(`鎵句笉鍒扮粍鍚堣闃?${name}`);
+        if (!collection) throw new Error(`找不到组合订阅 ${name}`);
         const subnames = [...collection.subscriptions];
         let subscriptionTags = collection.subscriptionTags;
         if (Array.isArray(subscriptionTags) && subscriptionTags.length > 0) {
@@ -549,12 +549,12 @@ async function produceArtifact({
                     let reqUA = sub.ua;
                     if (passThroughUA) {
                         $.info(
-                            `璁㈤槄寮€鍚簡閫忎紶 User-Agent, 浣跨敤璇锋眰鐨?User-Agent: ${ua}`,
+                            `订阅开启了透传 User-Agent, 使用请求的 User-Agent: ${ua}`,
                         );
                         reqUA = ua;
                     }
                     try {
-                        $.info(`姝ｅ湪澶勭悊瀛愯闃咃細${sub.name}...`);
+                        $.info(`正在处理子订阅：${sub.name}...`);
                         let raw;
                         let sourceRaw;
                         if (
@@ -585,16 +585,16 @@ async function produceArtifact({
                                                 undefined,
                                                 noCache || sub.noCache,
                                                 true,
-{ returnRaw: true, relayNodeId: sub.relayNodeId },
+                                                { returnRaw: true, relayNodeId: sub.relayNodeId },
                                             );
                                         } catch (err) {
                                             errors[url] = err;
                                             $.error(
-                                                `璁㈤槄 ${
+                                                `订阅 ${
                                                     sub.name
-                                                } 鐨勮繙绋嬭闃?${maskAgeSecretInUrl(
+                                                } 的远程订阅 ${maskAgeSecretInUrl(
                                                     url,
-                                                )} 鍙戠敓閿欒: ${err}`,
+                                                )} 发生错误: ${err}`,
                                             );
                                             return '';
                                         }
@@ -604,18 +604,18 @@ async function produceArtifact({
                             sourceRaw = downloaded.map((i) => i.raw ?? i);
 
                             if (Object.keys(errors).length > 0) {
-                                const message = `璁㈤槄 ${
+                                const message = `订阅 ${
                                     sub.name
-                                } 鐨勮繙绋嬭闃?${formatAgeSafeUrls(
+                                } 的远程订阅 ${formatAgeSafeUrls(
                                     errors,
-                                )} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
+                                )} 发生错误, 请查看日志`;
                                 handleIgnoreFailedRemoteSubError({
                                     mode: subMode,
                                     message,
                                     notify: () => {
                                         $.notify(
-                                            `馃實 Sub-Store 澶勭悊璁㈤槄澶辫触`,
-                                            `鉂?${sub.name}`,
+                                            `🌍 Sub-Store 处理订阅失败`,
+                                            `❌ ${sub.name}`,
                                             message,
                                         );
                                     },
@@ -662,7 +662,7 @@ async function produceArtifact({
                         rawResults[name] = currentRaw;
                         processed++;
                         $.info(
-                            `鉁?瀛愯闃咃細${sub.name}鍔犺浇鎴愬姛锛岃繘搴?-${
+                            `✅ 子订阅：${sub.name}加载成功，进度--${
                                 100 * (processed / subnames.length).toFixed(1)
                             }% `,
                         );
@@ -675,14 +675,14 @@ async function produceArtifact({
                                 error: err,
                                 notify: (error) => {
                                     $.notify(
-                                        `馃實 Sub-Store 澶勭悊璁㈤槄澶辫触`,
-                                        `鉂?${sub.name}`,
-                                        `馃 鍘熷洜锛?{error.message ?? error}`,
+                                        `🌍 Sub-Store 处理订阅失败`,
+                                        `❌ ${sub.name}`,
+                                        `🤔 原因：${error.message ?? error}`,
                                     );
                                 },
                             });
                             $.error(
-                                `璁㈤槄 ${sub.name} 鍦ㄧ粍鍚堣闃呭鐞嗕腑鍚敤鍏滃簳鍚庤繑鍥炵┖缁撴灉: ${
+                                `订阅 ${sub.name} 在组合订阅处理中启用兜底后返回空结果: ${
                                     err.message ?? err
                                 }`,
                             );
@@ -694,9 +694,9 @@ async function produceArtifact({
                         errors[name] = err;
                         rawResults[name] = undefined;
                         $.error(
-                            `鉂?澶勭悊缁勫悎璁㈤槄涓殑瀛愯闃? ${
+                            `❌ 处理组合订阅中的子订阅: ${
                                 sub.name
-                            }鏃跺嚭鐜伴敊璇細${err}锛佽繘搴?-${
+                            }时出现错误：${err}！进度--${
                                 100 * (processed / subnames.length).toFixed(1)
                             }%`,
                         );
@@ -705,13 +705,13 @@ async function produceArtifact({
             );
 
             if (Object.keys(errors).length > 0) {
-                const message = `缁勫悎璁㈤槄 ${collection.name} 鐨勫瓙璁㈤槄 ${Object.keys(
+                const message = `组合订阅 ${collection.name} 的子订阅 ${Object.keys(
                     errors,
-                ).join(', ')} 鍙戠敓閿欒, 璇锋煡鐪嬫棩蹇梎;
+                ).join(', ')} 发生错误, 请查看日志`;
                 const notify = () => {
                     $.notify(
-                        `馃實 Sub-Store 澶勭悊缁勫悎璁㈤槄澶辫触`,
-                        `鉂?${collection.name}`,
+                        `🌍 Sub-Store 处理组合订阅失败`,
+                        `❌ ${collection.name}`,
                         message,
                     );
                 };
@@ -763,16 +763,16 @@ async function produceArtifact({
                 rawResults,
             );
             if (proxies.length === 0) {
-                throw new Error(`缁勫悎璁㈤槄 ${name} 涓笉鍚湁鏁堣妭鐐筦);
+                throw new Error(`组合订阅 ${name} 中不含有效节点`);
             }
             // check duplicate
             const exist = {};
             for (const proxy of proxies) {
                 if (exist[proxy.name]) {
                     $.notify(
-                        '馃實 Sub-Store',
-                        `鈿狅笍 缁勫悎璁㈤槄 ${name} 鍖呭惈閲嶅鑺傜偣 ${proxy.name}锛乣,
-                        '璇蜂粩缁嗘娴嬮厤缃紒',
+                        '🌍 Sub-Store',
+                        `⚠️ 组合订阅 ${name} 包含重复节点 ${proxy.name}！`,
+                        '请仔细检测配置！',
                         {
                             'media-url':
                                 'https://cdn3.iconfinder.com/data/icons/seo-outline-1/512/25_code_program_programming_develop_bug_search_developer-512.png',
@@ -802,14 +802,14 @@ async function produceArtifact({
                 error: err,
                 notify: (error) => {
                     $.notify(
-                        `馃實 Sub-Store 澶勭悊缁勫悎璁㈤槄澶辫触`,
-                        `鉂?${collection.name}`,
-                        `馃 鍘熷洜锛?{error.message ?? error}`,
+                        `🌍 Sub-Store 处理组合订阅失败`,
+                        `❌ ${collection.name}`,
+                        `🤔 原因：${error.message ?? error}`,
                     );
                 },
             });
             $.error(
-                `缁勫悎璁㈤槄 ${collection.name} 鍚敤鍏滃簳鍚庤繑鍥炵┖缁撴灉: ${
+                `组合订阅 ${collection.name} 启用兜底后返回空结果: ${
                     err.message ?? err
                 }`,
             );
@@ -823,12 +823,12 @@ async function produceArtifact({
     } else if (type === 'rule') {
         const allRules = $.read(RULES_KEY);
         const rule = findByName(allRules, name);
-        if (!rule) throw new Error(`鎵句笉鍒拌鍒?${name}`);
+        if (!rule) throw new Error(`找不到规则 ${name}`);
         let rules = [];
         for (let i = 0; i < rule.urls.length; i++) {
             const url = rule.urls[i];
             $.info(
-                `姝ｅ湪澶勭悊URL锛?{url}锛岃繘搴?-${
+                `正在处理URL：${url}，进度--${
                     100 * ((i + 1) / rule.urls.length).toFixed(1)
                 }% `,
             );
@@ -838,7 +838,7 @@ async function produceArtifact({
                 rules = rules.concat(currentRules);
             } catch (err) {
                 $.error(
-                    `澶勭悊鍒嗘祦璁㈤槄涓殑URL: ${url}鏃跺嚭鐜伴敊璇細${err}! 璇ヨ闃呭凡琚烦杩囥€俙,
+                    `处理分流订阅中的URL: ${url}时出现错误：${err}! 该订阅已被跳过。`,
                 );
             }
         }
@@ -853,7 +853,7 @@ async function produceArtifact({
         const file = normalizeFileConfig(
             sourceFile || findByName(allFiles, name),
         );
-        if (!file) throw new Error(`鎵句笉鍒版枃浠?${name}`);
+        if (!file) throw new Error(`找不到文件 ${name}`);
         let raw = '';
         if (isMihomoConfigFile(file)) {
             raw = await prepareMihomoProfileContent(file, {
@@ -933,7 +933,7 @@ function logUploadResponse(body) {
             delete file.content;
         });
     }
-    $.info('涓婁紶閰嶇疆鍝嶅簲:');
+    $.info('上传配置响应:');
     $.info(JSON.stringify(body, null, 2));
 }
 
@@ -945,9 +945,9 @@ function resolveArtifactUploadUrl(body, artifactName) {
         ? raw_url
         : raw_url?.replace(/\/raw\/[^/]*\/(.*)/, '/raw/$1');
     $.info(
-        `涓婁紶閰嶇疆瀹屾垚\n鏂囦欢鍒楄〃: ${Object.keys(files).join(
+        `上传配置完成\n文件列表: ${Object.keys(files).join(
             ', ',
-        )}\n褰撳墠鏂囦欢: ${encodedName}\n鍝嶅簲杩斿洖鐨勫師濮嬮摼鎺? ${raw_url}\n澶勭悊瀹岀殑鏂伴摼鎺? ${new_url}`,
+        )}\n当前文件: ${encodedName}\n响应返回的原始链接: ${raw_url}\n处理完的新链接: ${new_url}`,
     );
     return new_url;
 }
@@ -1000,7 +1000,7 @@ function patchArtifactSyncResult(name, patcher) {
     const latestArtifacts = $.read(ARTIFACTS_KEY);
     const currentArtifact = findByName(latestArtifacts, name);
     if (!currentArtifact) {
-        $.info(`杩滅▼閰嶇疆 ${name} 宸蹭笉瀛樺湪, 璺宠繃鍚屾缁撴灉鍐欏叆`);
+        $.info(`远程配置 ${name} 已不存在, 跳过同步结果写入`);
         return null;
     }
 
@@ -1023,12 +1023,12 @@ async function uploadArtifactBatches({ allArtifacts, files, valid, invalid }) {
     const uploaded = [];
 
     if (uploadNames.length === 0) {
-        $.info('娌℃湁闇€瑕佷笂浼犵殑鍚屾閰嶇疆');
+        $.info('没有需要上传的同步配置');
         return uploaded;
     }
 
     $.info(
-        `鍑嗗鍒嗘壒涓婁紶鍚屾閰嶇疆: 鍏?${uploadNames.length} 涓? 姣忔壒 ${batchSize} 涓? 鎵规鏁?${batches.length}`,
+        `准备分批上传同步配置: 共 ${uploadNames.length} 个, 每批 ${batchSize} 个, 批次数 ${batches.length}`,
     );
 
     for (let index = 0; index < batches.length; index++) {
@@ -1042,9 +1042,9 @@ async function uploadArtifactBatches({ allArtifacts, files, valid, invalid }) {
 
         try {
             $.info(
-                `姝ｅ湪涓婁紶绗?${index + 1}/${
+                `正在上传第 ${index + 1}/${
                     batches.length
-                } 鎵瑰悓姝ラ厤缃? ${batchNames.join(', ')}`,
+                } 批同步配置: ${batchNames.join(', ')}`,
             );
             const resp = await syncToGist(batchFiles);
             const body = JSON.parse(resp.body);
@@ -1066,7 +1066,7 @@ async function uploadArtifactBatches({ allArtifacts, files, valid, invalid }) {
                         uploaded.push(artifact.name);
                     } else {
                         $.error(
-                            `鍚屾閰嶇疆 ${artifact.name} 涓婁紶鎴愬姛浣嗗搷搴斾腑鏈壘鍒版枃浠堕摼鎺,
+                            `同步配置 ${artifact.name} 上传成功但响应中未找到文件链接`,
                         );
                         invalid.push(artifact.name);
                     }
@@ -1074,9 +1074,9 @@ async function uploadArtifactBatches({ allArtifacts, files, valid, invalid }) {
             }
         } catch (e) {
             $.error(
-                `绗?${index + 1}/${
+                `第 ${index + 1}/${
                     batches.length
-                } 鎵瑰悓姝ラ厤缃笂浼犲け璐? ${batchNames.join(', ')}, 鍘熷洜: ${
+                } 批同步配置上传失败: ${batchNames.join(', ')}, 原因: ${
                     e.message ?? e
                 }`,
             );
@@ -1096,7 +1096,7 @@ function shouldSyncArtifact(artifact, { skipCronArtifacts = false } = {}) {
 }
 
 async function syncArtifacts(options = {}) {
-    $.info('寮€濮嬪悓姝ユ墍鏈夎繙绋嬮厤缃?..');
+    $.info('开始同步所有远程配置...');
     const allArtifacts = $.read(ARTIFACTS_KEY);
     const files = {};
 
@@ -1133,7 +1133,7 @@ async function syncArtifacts(options = {}) {
 
         if (enabledCount === 0) {
             $.info(
-                `闇€鍚屾鐨勯厤缃? ${enabledCount}, 鎬绘暟: ${allArtifacts.length}`,
+                `需同步的配置: ${enabledCount}, 总数: ${allArtifacts.length}`,
             );
             return;
         }
@@ -1159,7 +1159,7 @@ async function syncArtifacts(options = {}) {
                 try {
                     if (shouldSyncArtifact(artifact, options)) {
                         $.info(
-                            `姝ｅ湪鍚屾浜戦厤缃細${formatArtifactLogName(
+                            `正在同步云配置：${formatArtifactLogName(
                                 artifact,
                             )}...`,
                         );
@@ -1169,7 +1169,7 @@ async function syncArtifacts(options = {}) {
 
                         if (useMihomoExternal) {
                             $.info(
-                                `鎵嬪姩鎸囧畾浜?target 涓?SurgeMac, 灏嗕娇鐢?mihomo External`,
+                                `手动指定了 target 为 SurgeMac, 将使用 mihomo External`,
                             );
                         }
 
@@ -1178,7 +1178,7 @@ async function syncArtifacts(options = {}) {
                         );
 
                         // if (!output || output.length === 0)
-                        //     throw new Error('璇ラ厤缃殑缁撴灉涓虹┖ 涓嶈繘琛屼笂浼?);
+                        //     throw new Error('该配置的结果为空 不进行上传');
 
                         if (shouldUploadArtifact(artifact)) {
                             files[encodeURIComponent(artifact.name)] = {
@@ -1192,9 +1192,9 @@ async function syncArtifacts(options = {}) {
                     }
                 } catch (e) {
                     $.error(
-                        `鐢熸垚鍚屾閰嶇疆 ${formatArtifactLogName(
+                        `生成同步配置 ${formatArtifactLogName(
                             artifact,
-                        )} 鍙戠敓閿欒: ${
+                        )} 发生错误: ${
                             e.message ?? e
                         }`,
                     );
@@ -1205,22 +1205,22 @@ async function syncArtifacts(options = {}) {
 
         const producedCount = valid.length + producedWithoutUpload.length;
         $.info(
-            `${producedCount} 涓悓姝ラ厤缃敓鎴愭垚鍔? ${valid
+            `${producedCount} 个同步配置生成成功: ${valid
                 .concat(producedWithoutUpload)
                 .join(', ')}`,
         );
-        $.info(`${invalid.length} 涓悓姝ラ厤缃敓鎴愬け璐? ${invalid.join(', ')}`);
+        $.info(`${invalid.length} 个同步配置生成失败: ${invalid.join(', ')}`);
         if (producedWithoutUpload.length > 0) {
             $.info(
                 `${
                     producedWithoutUpload.length
-                } 涓悓姝ラ厤缃粎鐢熸垚鏈笂浼? ${producedWithoutUpload.join(', ')}`,
+                } 个同步配置仅生成未上传: ${producedWithoutUpload.join(', ')}`,
             );
         }
 
         if (producedCount === 0) {
             throw new Error(
-                `鍚屾閰嶇疆 ${invalid.join(', ')} 鐢熸垚澶辫触 璇︽儏璇锋煡鐪嬫棩蹇梎,
+                `同步配置 ${invalid.join(', ')} 生成失败 详情请查看日志`,
             );
         }
 
@@ -1232,33 +1232,33 @@ async function syncArtifacts(options = {}) {
         });
 
         $.write(allArtifacts, ARTIFACTS_KEY);
-        $.info('鍚屾閰嶇疆鎵ц瀹屾垚');
+        $.info('同步配置执行完成');
 
         if (invalid.length > 0) {
             throw new Error(
-                `鍚屾閰嶇疆鎴愬姛 ${
+                `同步配置成功 ${
                     uploaded.length + producedWithoutUpload.length
-                } 涓? 澶辫触 ${invalid.length} 涓? 璇︽儏璇锋煡鐪嬫棩蹇梎,
+                } 个, 失败 ${invalid.length} 个, 详情请查看日志`,
             );
         } else {
             $.info(
-                `鍚屾閰嶇疆鎴愬姛 ${
+                `同步配置成功 ${
                     uploaded.length + producedWithoutUpload.length
-                } 涓猔,
+                } 个`,
             );
         }
     } catch (e) {
-        $.error(`鍚屾閰嶇疆澶辫触锛屽師鍥狅細${e.message ?? e}`);
+        $.error(`同步配置失败，原因：${e.message ?? e}`);
         throw e;
     }
 }
 async function syncAllArtifacts(_, res) {
-    $.info('寮€濮嬪悓姝ユ墍鏈夎繙绋嬮厤缃?..');
+    $.info('开始同步所有远程配置...');
     try {
         await syncArtifacts();
         success(res);
     } catch (e) {
-        $.error(`鍚屾閰嶇疆澶辫触锛屽師鍥狅細${e.message ?? e}`);
+        $.error(`同步配置失败，原因：${e.message ?? e}`);
         failed(
             res,
             new InternalServerError(
@@ -1275,37 +1275,37 @@ async function syncArtifactItem(name) {
     const artifact = findByName(allArtifacts, name);
 
     if (!artifact) {
-        $.error(`鎵句笉鍒拌繙绋嬮厤缃?${name}`);
+        $.error(`找不到远程配置 ${name}`);
         throw new ResourceNotFoundError(
             'RESOURCE_NOT_FOUND',
-            `鎵句笉鍒拌繙绋嬮厤缃?${name}`,
+            `找不到远程配置 ${name}`,
         );
     }
 
     if (!artifact.source) {
-        $.error(`杩滅▼閰嶇疆 ${formatArtifactLogName(artifact)} 鏈缃潵婧恅);
+        $.error(`远程配置 ${formatArtifactLogName(artifact)} 未设置来源`);
         throw new ResourceNotFoundError(
             'RESOURCE_HAS_NO_SOURCE',
-            `杩滅▼閰嶇疆 ${formatArtifactLogName(artifact)} 鏈缃潵婧恅,
+            `远程配置 ${formatArtifactLogName(artifact)} 未设置来源`,
         );
     }
 
-    $.info(`寮€濮嬪悓姝ヨ繙绋嬮厤缃?${formatArtifactLogName(artifact)}...`);
+    $.info(`开始同步远程配置 ${formatArtifactLogName(artifact)}...`);
 
     const useMihomoExternal = artifact.platform === 'SurgeMac';
 
     if (useMihomoExternal) {
-        $.info(`鎵嬪姩鎸囧畾浜?target 涓?SurgeMac, 灏嗕娇鐢?mihomo External`);
+        $.info(`手动指定了 target 为 SurgeMac, 将使用 mihomo External`);
     }
     const output = await produceSyncArtifactOutput(artifact);
 
     // if (!output || output.length === 0)
-    //     throw new Error('璇ラ厤缃殑缁撴灉涓虹┖ 涓嶈繘琛屼笂浼?);
+    //     throw new Error('该配置的结果为空 不进行上传');
     if (!shouldUploadArtifact(artifact)) {
         $.info(
-            `閰嶇疆 ${formatArtifactLogName(
+            `配置 ${formatArtifactLogName(
                 artifact,
-            )} 宸插叧闂笂浼? 浠呮洿鏂版墽琛屾椂闂碻,
+            )} 已关闭上传, 仅更新执行时间`,
         );
         const updated = new Date().getTime();
         const patchedArtifact = patchArtifactSyncResult(
@@ -1327,7 +1327,7 @@ async function syncArtifactItem(name) {
     }
 
     $.info(
-        `姝ｅ湪涓婁紶閰嶇疆锛?{formatArtifactLogName(artifact)}\n>>>${JSON.stringify(
+        `正在上传配置：${formatArtifactLogName(artifact)}\n>>>${JSON.stringify(
             artifact,
             null,
             2,
@@ -1367,7 +1367,7 @@ async function syncArtifact(req, res) {
         const artifact = await syncArtifactItem(name);
         success(res, artifact);
     } catch (err) {
-        $.error(`杩滅▼閰嶇疆 ${name} 鍙戠敓閿欒: ${err.message ?? err}`);
+        $.error(`远程配置 ${name} 发生错误: ${err.message ?? err}`);
         failed(
             res,
             err instanceof ResourceNotFoundError

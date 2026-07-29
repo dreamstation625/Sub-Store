@@ -24,6 +24,15 @@ docker build -t dreamstation625/sub-store:latest .
 ```bash
 docker build --build-arg NODE_VERSION=22.16.0 -t dreamstation625/sub-store:latest .
 ```
+本地使用 PowerShell、Docker Buildx 构建并推送多标签镜像：
+
+```powershell
+docker buildx build `
+  --build-context frontend=../Sub-Store-Front-End `
+  -t dreamstation625/sub-store:26.0729.01 `
+  -t dreamstation625/sub-store:latest `
+  --push .
+```
 
 ### 运行
 
@@ -115,6 +124,14 @@ docker build -t dreamstation625/sub-store-wss-client:latest ./wss-client
 ```bash
 cd wss-client
 docker build -t dreamstation625/sub-store-wss-client:latest .
+```
+在仓库根目录使用 PowerShell、Docker Buildx 构建并推送多标签镜像。wss-client 不需要 `frontend` 构建上下文：
+
+```powershell
+docker buildx build `
+  -t dreamstation625/sub-store-wss-client:26.0729.01 `
+  -t dreamstation625/sub-store-wss-client:latest `
+  --push ./wss-client
 ```
 
 ### 配置目录
