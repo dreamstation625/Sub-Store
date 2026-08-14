@@ -244,6 +244,7 @@ export default async function download(
                         undefined,
                         undefined,
                         preprocess,
+                        options,
                     );
                 } catch (e) {
                     $.error(
@@ -267,6 +268,7 @@ export default async function download(
                     undefined,
                     undefined,
                     preprocess,
+                    options,
                 ).catch((e) => {
                     $.error(
                         `乐观缓存: URL ${safeUrl} 异步更新缓存发生错误 ${
@@ -311,6 +313,7 @@ export default async function download(
                     await produceArtifact({
                         type: 'file',
                         name,
+                        noFlow: options?.noFlow,
                     }),
                     returnRaw,
                 );
@@ -503,7 +506,7 @@ export default async function download(
 
     // 检查订阅有效性
 
-    if ($arguments?.validCheck) {
+    if ($arguments?.validCheck && !$arguments?.noFlow && !options?.noFlow) {
         await validCheck(
             parseFlowHeaders(
                 await getFlowHeaders(

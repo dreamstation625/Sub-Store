@@ -1075,6 +1075,9 @@ const hysteria2Parser = (proxy = {}) => {
     if (proxy['obfs-password'])
         parsedProxy.obfs.password = proxy['obfs-password'];
     if (!parsedProxy.obfs.type) delete parsedProxy.obfs;
+    if (proxy['bbr-profile']) parsedProxy.bbr_profile = proxy['bbr-profile'];
+    if (proxy['disable-chrome-parrot'])
+        parsedProxy.disable_chrome_parrot = !!proxy['disable-chrome-parrot'];
     networkParser(proxy, parsedProxy);
     tlsParser(proxy, parsedProxy);
     tfoParser(proxy, parsedProxy);
@@ -1117,7 +1120,7 @@ const tuic5Parser = (proxy = {}) => {
     domainResolverParser(proxy, parsedProxy);
     return parsedProxy;
 };
-const anytlsParser = (proxy = {}) => {
+const anytlsParser = (proxy = {}, includeUnsupportedProxy = false) => {
     const parsedProxy = {
         tag: proxy.name,
         type: 'anytls',
@@ -1126,6 +1129,8 @@ const anytlsParser = (proxy = {}) => {
         password: proxy.password,
         tls: { enabled: true, server_name: proxy.server, insecure: false },
     };
+    if (proxy['client-metadata'])
+        parsedProxy.client_metadata = `${proxy['client-metadata']}`;
     if (/^\d+$/.test(proxy['idle-session-check-interval']))
         parsedProxy.idle_session_check_interval = `${proxy['idle-session-check-interval']}s`;
     if (/^\d+$/.test(proxy['idle-session-timeout']))
@@ -1553,7 +1558,12 @@ export default function singbox_Producer() {
                             list.push(wireguardParser(proxy));
                             break;
                         case 'anytls':
-                            list.push(anytlsParser(proxy));
+                            list.push(
+                                anytlsParser(
+                                    proxy,
+                                    opts['include-unsupported-proxy'],
+                                ),
+                            );
                             break;
                         case 'tailscale':
                             list.push(tailscaleParser(proxy));

@@ -97,6 +97,7 @@ async function downloadFileSources({
     ua,
     proxy,
     noCache,
+    noFlow,
     ignoreFailedRemoteFile,
     notifyTitle = '🌍 Sub-Store 处理文件失败',
 }) {
@@ -121,7 +122,7 @@ async function downloadFileSources({
                     undefined,
                     noCache,
                     undefined,
-                    { relayNodeId: file.relayNodeId },
+                    { noFlow, relayNodeId: file.relayNodeId },
                 );
             } catch (err) {
                 errors[url] = err;
@@ -169,6 +170,7 @@ async function resolveFileRawContent(
         ignoreFailedRemoteFile,
         proxy,
         noCache,
+        noFlow,
         notifyTitle,
     } = {},
 ) {
@@ -183,6 +185,7 @@ async function resolveFileRawContent(
             ua,
             proxy,
             noCache,
+            noFlow,
             ignoreFailedRemoteFile,
             notifyTitle,
         });
@@ -207,6 +210,7 @@ async function resolveFileRawContent(
         ua,
         proxy,
         noCache,
+        noFlow,
         ignoreFailedRemoteFile,
         notifyTitle,
     });
@@ -258,6 +262,7 @@ async function prepareMihomoProfileContent(file, sourceOptions = {}) {
                 'delete-underscore-fields': true,
                 'include-unsupported-proxy': file?.includeUnsupportedProxy,
             },
+            noFlow: sourceOptions.noFlow,
         });
     }
     return ProxyUtils.yaml.safeDump(config);
@@ -281,6 +286,7 @@ async function produceArtifact({
     $options,
     proxy,
     noCache,
+    noFlow,
     all,
 }) {
     platform = platform || 'JSON';
@@ -300,6 +306,7 @@ async function produceArtifact({
             ignoreFailedRemoteSub,
             sub.ignoreFailedRemoteSub,
         );
+        const skipFlow = noFlow || sub.noFlow;
 
         try {
             let raw;
@@ -328,7 +335,11 @@ async function produceArtifact({
                                     awaitCustomCache,
                                     noCache || sub.noCache,
                                     true,
-                                    { returnRaw: true, relayNodeId: sub.relayNodeId },
+                                    {
+                                        returnRaw: true,
+                                        noFlow: skipFlow,
+                                        relayNodeId: sub.relayNodeId,
+                                    },
                                 );
                             } catch (err) {
                                 errors[url] = err;
@@ -393,7 +404,11 @@ async function produceArtifact({
                                     awaitCustomCache,
                                     noCache || sub.noCache,
                                     true,
-                                    { returnRaw: true, relayNodeId: sub.relayNodeId },
+                                    {
+                                        returnRaw: true,
+                                        noFlow: skipFlow,
+                                        relayNodeId: sub.relayNodeId,
+                                    },
                                 );
                             } catch (err) {
                                 errors[url] = err;
@@ -455,6 +470,7 @@ async function produceArtifact({
                 { [sub.name]: sub },
                 $options,
                 sourceRaw,
+                { noFlow: skipFlow },
             );
             if (proxies.length === 0) {
                 throw new Error(`订阅 ${name} 中不含有效节点`);
@@ -532,6 +548,7 @@ async function produceArtifact({
             ignoreFailedRemoteSub,
             collection.ignoreFailedRemoteSub,
         );
+        const skipFlow = noFlow || collection.noFlow;
 
         try {
             const results = {};
@@ -585,7 +602,13 @@ async function produceArtifact({
                                                 undefined,
                                                 noCache || sub.noCache,
                                                 true,
-                                                { returnRaw: true, relayNodeId: sub.relayNodeId },
+                                                {
+                                                    returnRaw: true,
+                                                    noFlow:
+                                                        skipFlow || sub.noFlow,
+                                                    relayNodeId:
+                                                        sub.relayNodeId,
+                                                },
                                             );
                                         } catch (err) {
                                             errors[url] = err;
@@ -657,6 +680,7 @@ async function produceArtifact({
                             },
                             undefined,
                             currentRaw,
+                            { noFlow: skipFlow || sub.noFlow },
                         );
                         results[name] = currentProxies;
                         rawResults[name] = currentRaw;
@@ -761,6 +785,7 @@ async function produceArtifact({
                 { _collection: collection },
                 $options,
                 rawResults,
+                { noFlow: skipFlow },
             );
             if (proxies.length === 0) {
                 throw new Error(`组合订阅 ${name} 中不含有效节点`);
@@ -864,6 +889,7 @@ async function produceArtifact({
                 ignoreFailedRemoteFile,
                 proxy,
                 noCache,
+                noFlow,
             });
         } else {
             raw = await resolveFileRawContent(file, {
@@ -874,6 +900,7 @@ async function produceArtifact({
                 ignoreFailedRemoteFile,
                 proxy,
                 noCache,
+                noFlow,
             });
         }
         if (produceType === 'raw') {
@@ -893,6 +920,11 @@ async function produceArtifact({
                           $file: file,
                       },
                       file.process,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      { noFlow },
                   )
                 : { $content: filesContent, $files: files, $options };
 
