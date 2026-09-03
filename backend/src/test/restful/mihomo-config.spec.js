@@ -7,6 +7,7 @@ import { after, afterEach, before, beforeEach, describe, it } from 'mocha';
 import { FILES_KEY, SUBS_KEY } from '@/constants';
 
 let $;
+let openApi;
 let registerFileRoutes;
 let registerPreviewRoutes;
 let originalError;
@@ -159,6 +160,7 @@ async function previewFile(file) {
 describe('mihomo config file routes', function () {
     before(async function () {
         ({ default: $ } = require('@/core/app'));
+        openApi = require('@/vendor/open-api');
         ({ default: registerFileRoutes } = require('@/restful/file'));
         ({ default: registerPreviewRoutes } = require('@/restful/preview'));
 
@@ -282,6 +284,212 @@ describe('mihomo config file routes', function () {
         expect(res.sent).to.include('proxies:');
         expect(res.sent).to.include('name: Supported');
         expect(res.sent).to.not.include('name: Unsupported');
+    });
+
+    it('uses the selected subscription URL for mihomoConfig flow info', async function () {
+        const originalHTTP = openApi.HTTP;
+        const sourceUrl = 'https://example.com/auto-flow-subscription';
+        const flowUrl = 'https://example.com/auto-flow-body';
+        const requests = [];
+
+        try {
+            state[SUBS_KEY][0] = {
+                name: 'demo-sub',
+                source: 'remote',
+                url:
+                    `${sourceUrl}#flowUrl=${encodeURIComponent(flowUrl)}` +
+                    '&flowUserAgent=Flow%20Agent' +
+                    `&flowHeaders=${encodeURIComponent(
+                        JSON.stringify({ 'X-Flow': 'yes' }),
+                    )}&noCache`,
+                process: [],
+            };
+            state[FILES_KEY] = [
+                {
+                    name: 'auto-flow-file',
+                    type: 'mihomoConfig',
+                    sourceType: 'subscription',
+                    sourceName: 'demo-sub',
+                    process: [],
+                },
+            ];
+            openApi.HTTP = () => ({
+                get: async ({ url, headers }) => {
+                    requests.push(['GET', url, headers]);
+                    return {
+                        body:
+                            url === flowUrl
+                                ? 'upload=1; download=2; total=3; expire=4102444800'
+                                : state[SUBS_KEY][0].content ||
+                                  'proxies:\n' +
+                                      '  - {name: Flow Node, type: ss, server: ss.example.com, port: 8388, cipher: aes-128-gcm, password: secret}',
+                        headers: {},
+                        statusCode: 200,
+                    };
+                },
+                head: async ({ url }) => {
+                    throw new Error(`Unexpected HEAD request: ${url}`);
+                },
+            });
+
+            const res = await requestFile('auto-flow-file');
+
+            expect(res.statusCode).to.equal(200);
+            expect(res.headers).to.have.property(
+                'subscription-userinfo',
+                'upload=1; download=2; total=3; expire=4102444800',
+            );
+            expect(
+                requests.map(([method, url]) => [method, url]),
+            ).to.deep.equal([
+                ['GET', sourceUrl],
+                ['GET', flowUrl],
+            ]);
+            expect(requests[1][2]).to.include({
+                'user-agent': 'Flow Agent',
+                'x-flow': 'yes',
+            });
+        } finally {
+            openApi.HTTP = originalHTTP;
+        }
+    });
+
+    it('prefers a manually configured mihomoConfig flow URL', async function () {
+        const originalHTTP = openApi.HTTP;
+        const automaticUrl = 'https://example.com/automatic-flow';
+        const manualUrl = 'https://example.com/manual-flow';
+        const requests = [];
+
+        try {
+            state[SUBS_KEY][0].url = automaticUrl;
+            state[FILES_KEY] = [
+                {
+                    name: 'manual-flow-file',
+                    type: 'mihomoConfig',
+                    sourceType: 'subscription',
+                    sourceName: 'demo-sub',
+                    subInfoUrl: `${manualUrl}#noCache`,
+                    process: [],
+                },
+            ];
+            openApi.HTTP = () => ({
+                get: async ({ url }) => {
+                    throw new Error(`Unexpected GET request: ${url}`);
+                },
+                head: async ({ url }) => {
+                    requests.push(['HEAD', url]);
+                    return {
+                        headers: {
+                            'subscription-userinfo':
+                                'upload=4; download=5; total=6; expire=4102444800',
+                        },
+                        statusCode: 200,
+                    };
+                },
+            });
+
+            const res = await requestFile('manual-flow-file');
+
+            expect(res.statusCode).to.equal(200);
+            expect(res.headers).to.have.property(
+                'subscription-userinfo',
+                'upload=4; download=5; total=6; expire=4102444800',
+            );
+            expect(requests).to.deep.equal([['HEAD', manualUrl]]);
+        } finally {
+            openApi.HTTP = originalHTTP;
+        }
+    });
+
+    it('uses the remote mihomoConfig URL for flow info', async function () {
+        const originalHTTP = openApi.HTTP;
+        const sourceUrl = 'https://example.com/remote-mihomo-config';
+        const requests = [];
+
+        try {
+            state[FILES_KEY] = [
+                {
+                    name: 'remote-flow-file',
+                    type: 'mihomoConfig',
+                    sourceType: 'remote',
+                    url: `${sourceUrl}#noCache`,
+                    process: [],
+                },
+            ];
+            openApi.HTTP = () => ({
+                get: async ({ url }) => {
+                    requests.push(['GET', url]);
+                    return {
+                        body: 'mixed-port: 7890',
+                        headers: {},
+                        statusCode: 200,
+                    };
+                },
+                head: async ({ url }) => {
+                    requests.push(['HEAD', url]);
+                    return {
+                        headers: {
+                            'subscription-userinfo':
+                                'upload=7; download=8; total=9; expire=4102444800',
+                        },
+                        statusCode: 200,
+                    };
+                },
+            });
+
+            const res = await requestFile('remote-flow-file');
+
+            expect(res.statusCode).to.equal(200);
+            expect(res.headers).to.have.property(
+                'subscription-userinfo',
+                'upload=7; download=8; total=9; expire=4102444800',
+            );
+            expect(requests).to.deep.equal([
+                ['GET', sourceUrl],
+                ['HEAD', sourceUrl],
+            ]);
+        } finally {
+            openApi.HTTP = originalHTTP;
+        }
+    });
+
+    it('does not auto-query flow info for ordinary remote files', async function () {
+        const originalHTTP = openApi.HTTP;
+        const sourceUrl = 'https://example.com/ordinary-remote-file';
+        const requests = [];
+
+        try {
+            state[FILES_KEY] = [
+                {
+                    name: 'ordinary-remote-file',
+                    type: 'file',
+                    source: 'remote',
+                    url: `${sourceUrl}#noCache`,
+                    process: [],
+                },
+            ];
+            openApi.HTTP = () => ({
+                get: async ({ url }) => {
+                    requests.push(['GET', url]);
+                    return {
+                        body: 'ordinary remote content',
+                        headers: {},
+                        statusCode: 200,
+                    };
+                },
+                head: async ({ url }) => {
+                    throw new Error(`Unexpected HEAD request: ${url}`);
+                },
+            });
+
+            const res = await requestFile('ordinary-remote-file');
+
+            expect(res.statusCode).to.equal(200);
+            expect(res.sent).to.equal('ordinary remote content');
+            expect(requests).to.deep.equal([['GET', sourceUrl]]);
+        } finally {
+            openApi.HTTP = originalHTTP;
+        }
     });
 
     it('previews mihomoConfig proxies before file processors run', async function () {

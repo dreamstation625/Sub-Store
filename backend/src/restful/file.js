@@ -6,7 +6,7 @@ import {
 } from '@/utils/database';
 import { getCreateItemPosition } from '@/utils/create-item-position';
 import { getFlowHeaders, normalizeFlowHeader } from '@/utils/flow';
-import { FILES_KEY, ARTIFACTS_KEY } from '@/constants';
+import { FILES_KEY, ARTIFACTS_KEY, SUBS_KEY } from '@/constants';
 import { failed, success } from '@/restful/response';
 import $ from '@/core/app';
 import {
@@ -45,6 +45,96 @@ export default function register($app) {
 
     $app.route('/api/files').get(getAllFiles).post(createFile).put(replaceFile);
     $app.route('/api/wholeFiles').get(getAllWholeFiles);
+}
+
+function getFirstSourceUrl(rawUrl) {
+    return (
+        `${rawUrl || ''}`
+            .split(/[\r\n]+/)
+            .map((item) => item.trim())
+            .find((item) => item.length) || ''
+    );
+}
+
+function getLinkArguments(rawUrl) {
+    const hashIndex = rawUrl.indexOf('#');
+    if (hashIndex === -1) return {};
+
+    const rawArguments = rawUrl.slice(hashIndex + 1);
+    try {
+        const parsed = JSON.parse(decodeURIComponent(rawArguments));
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed
+            : {};
+    } catch (e) {
+        const argumentsObject = {};
+        for (const pair of rawArguments.split('&')) {
+            const separatorIndex = pair.indexOf('=');
+            const key =
+                separatorIndex === -1 ? pair : pair.slice(0, separatorIndex);
+            const value =
+                separatorIndex === -1
+                    ? undefined
+                    : pair.slice(separatorIndex + 1);
+            argumentsObject[key] =
+                value == null || value === ''
+                    ? true
+                    : decodeURIComponent(value);
+        }
+        return argumentsObject;
+    }
+}
+
+function resolveFileFlowRequest(file) {
+    // 文件手动设置始终优先于来源自动继承。
+    if (file.subInfoUrl) {
+        return {
+            url: file.subInfoUrl,
+            userAgent: file.subInfoUserAgent,
+            proxy: file.proxy,
+        };
+    }
+
+    if (!isMihomoConfigFile(file)) return;
+
+    if (file.sourceType === 'remote') {
+        const url = getFirstSourceUrl(file.url);
+        if (!url) return;
+        const linkArguments = getLinkArguments(url);
+        if (linkArguments.noFlow) return;
+        return {
+            url,
+            userAgent: file.subInfoUserAgent || linkArguments.flowUserAgent,
+            proxy: file.proxy,
+            flowUrl: linkArguments.flowUrl,
+            flowHeaders: linkArguments.flowHeaders,
+        };
+    }
+
+    if (file.sourceType !== 'subscription' || !file.sourceName) return;
+
+    const subscription = findByName($.read(SUBS_KEY) || [], file.sourceName);
+    if (
+        !subscription ||
+        subscription.noFlow ||
+        (subscription.source === 'local' &&
+            !['localFirst', 'remoteFirst'].includes(subscription.mergeSources))
+    ) {
+        return;
+    }
+
+    const url = getFirstSourceUrl(subscription.url);
+    if (!url) return;
+    const linkArguments = getLinkArguments(url);
+    if (linkArguments.noFlow) return;
+
+    return {
+        url,
+        userAgent: file.subInfoUserAgent || linkArguments.flowUserAgent,
+        proxy: file.proxy || subscription.proxy,
+        flowUrl: linkArguments.flowUrl,
+        flowHeaders: linkArguments.flowHeaders,
+    };
 }
 
 // file API
@@ -308,14 +398,16 @@ async function getFile(req, res, next) {
             });
 
             try {
-                const flowSubInfoUrl = sourceFile.subInfoUrl;
-                if (flowSubInfoUrl) {
+                const flowRequest = resolveFileFlowRequest(sourceFile);
+                if (flowRequest) {
                     // forward flow headers
                     const flowInfo = await getFlowHeaders(
-                        flowSubInfoUrl,
-                        sourceFile.subInfoUserAgent,
+                        flowRequest.url,
+                        flowRequest.userAgent,
                         undefined,
-                        sourceFile.proxy,
+                        flowRequest.proxy,
+                        flowRequest.flowUrl,
+                        flowRequest.flowHeaders,
                     );
                     if (flowInfo) {
                         const headers = normalizeFlowHeader(flowInfo, true);
