@@ -118,7 +118,6 @@ function getWssClients(req, res) {
 
 function maskSensitiveSettings(settings = {}) {
     const masked = { ...settings };
-    if (masked.wssRelayToken) masked.wssRelayToken = '***';
     if (masked.wssRelayAdminToken) masked.wssRelayAdminToken = '***';
     return masked;
 }

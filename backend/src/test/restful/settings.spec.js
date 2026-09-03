@@ -13,6 +13,14 @@ function createRouteApp() {
     const handlers = new Map();
     const app = {
         handlers,
+        get(pattern, handler) {
+            handlers.set(`GET ${pattern}`, handler);
+            return this;
+        },
+        post(pattern, handler) {
+            handlers.set(`POST ${pattern}`, handler);
+            return this;
+        },
         route(pattern) {
             const chain = {};
             chain.get = (handler) => {
@@ -51,6 +59,37 @@ function createResponse(routePath) {
 }
 
 describe('settings routes', function () {
+    describe('WSS relay settings', function () {
+        const originalRead = $.read.bind($);
+        const originalWrite = $.write.bind($);
+
+        afterEach(function () {
+            $.read = originalRead;
+            $.write = originalWrite;
+        });
+
+        it('returns the WSS connection token while masking the admin token', async function () {
+            const settings = {
+                artifactStore: 'https://example.com/sub-store',
+                wssRelayToken: 'connection-token',
+                wssRelayAdminToken: 'admin-token',
+            };
+            $.read = () => settings;
+            $.write = () => true;
+
+            const app = createRouteApp();
+            registerSettingsRoutes(app);
+            const getHandler = app.handlers.get('GET /api/settings');
+            const res = createResponse('/api/settings');
+
+            await getHandler({}, res);
+
+            expect(res.body.status).to.equal('success');
+            expect(res.body.data.wssRelayToken).to.equal('connection-token');
+            expect(res.body.data.wssRelayAdminToken).to.equal('***');
+        });
+    });
+
     describe('artifact store refresh detection', function () {
         it('refreshes when GitHub API URL changes', function () {
             expect(
