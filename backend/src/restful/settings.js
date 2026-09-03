@@ -150,7 +150,7 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
     try {
-        const settings = $.read(SETTINGS_KEY);
+        const settings = $.read(SETTINGS_KEY) || {};
         const newSettings = {
             ...settings,
             ...req.body,
@@ -257,7 +257,7 @@ async function updateSettings(req, res) {
 }
 
 export async function updateAvatar() {
-    const settings = $.read(SETTINGS_KEY);
+    const settings = $.read(SETTINGS_KEY) || {};
     const {
         githubUser: username,
         syncPlatform,
@@ -323,7 +323,7 @@ export async function updateAvatar() {
 
 export async function updateArtifactStore() {
     $.log('Updating artifact store');
-    const settings = $.read(SETTINGS_KEY);
+    const settings = $.read(SETTINGS_KEY) || {};
     const { gistToken, syncPlatform } = settings;
     if (gistToken) {
         const manager = new Gist({

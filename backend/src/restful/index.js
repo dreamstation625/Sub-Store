@@ -92,7 +92,7 @@ export default function serve() {
                         next();
                         return;
                     } else {
-                        const settings = $.read(SETTINGS_KEY);
+                        const settings = $.read(SETTINGS_KEY) || {};
                         if (settings?.appearanceSetting?.invalidShareFakeNode) {
                             req.query._fakeNode = true;
                             req.url = req.url.replace(
@@ -397,7 +397,7 @@ export default function serve() {
                                 name: req.params.name,
                             });
                             if (!token) {
-                                const settings = $.read(SETTINGS_KEY);
+                                const settings = $.read(SETTINGS_KEY) || {};
                                 if (
                                     settings?.appearanceSetting
                                         ?.invalidShareFakeNode
