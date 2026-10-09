@@ -1,4 +1,5 @@
 import dns from 'node:dns/promises';
+import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -6,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_UA = 'clash.meta/v1.19.25';
+const MAX_FRAME_BYTES = 512 * 1024;
+const MAX_CHUNK_BYTES = 128 * 1024;
 const DEFAULT_CONFIG_PATH = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../config.json',
@@ -50,7 +53,7 @@ class RelayClient {
             type: 'hello',
             clientId: this.config.clientId,
             clientName: this.config.clientName,
-            capabilities: ['fetch'],
+            capabilities: ['fetch', 'fetch-chunks-v1'],
             maxBodyBytes: this.config.maxBodyBytes,
         });
 
@@ -100,11 +103,44 @@ class RelayClient {
                 }`,
             );
         }
+        await this.sendFetchResult(ws, message, response);
+    }
+
+    async sendFetchResult(ws, request, response) {
+        const result = { type: 'fetch-result', id: request.id, ...response };
+        if (!response.ok || Buffer.byteLength(JSON.stringify(result)) <= MAX_FRAME_BYTES) {
+            this.send(ws, result);
+            return;
+        }
+        if (!Number.isInteger(request.responseChunkBytes) || request.responseChunkBytes <= 0) {
+            this.send(ws, {
+                type: 'fetch-result', id: request.id, ok: false,
+                error: { message: 'Response requires chunk support; update the Sub-Store backend' },
+            });
+            return;
+        }
+        const body = Buffer.from(response.body, 'utf8');
+        const chunkBytes = Math.min(request.responseChunkBytes, MAX_CHUNK_BYTES);
         this.send(ws, {
-            type: 'fetch-result',
-            id: message.id,
-            ...response,
+            type: 'fetch-result-start', id: request.id, bodyBytes: body.length,
+            statusCode: response.statusCode, headers: response.headers,
         });
+        const deadline = Date.now() + positiveInt(request.timeout, this.config.defaultTimeoutMs);
+        for (let offset = 0, index = 0; offset < body.length; offset += chunkBytes, index++) {
+            // 控制发送队列，连接已断开时不继续生成分块。
+            while (ws.bufferedAmount > 1024 * 1024 && ws.readyState === WebSocket.OPEN && Date.now() < deadline) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            if (Date.now() >= deadline) {
+                this.send(ws, { type: 'fetch-result', id: request.id, ok: false, error: { message: 'Response transfer timeout' } });
+                return;
+            }
+            if (!this.send(ws, {
+                type: 'fetch-result-chunk', id: request.id, index,
+                data: body.subarray(offset, offset + chunkBytes).toString('base64'),
+            })) return;
+        }
+        this.send(ws, { type: 'fetch-result-end', id: request.id });
     }
 
     async handleFetch(message) {
@@ -154,7 +190,8 @@ class RelayClient {
                     continue;
                 }
 
-                const body = await this.readLimitedText(response);
+                const maxBodyBytes = Math.min(this.config.maxBodyBytes, positiveInt(message.maxBodyBytes, this.config.maxBodyBytes));
+                const body = await this.readLimitedText(response, maxBodyBytes);
                 if (response.status < 200 || response.status >= 400) {
                     throw new Error(`statusCode: ${response.status}`);
                 }
@@ -171,7 +208,7 @@ class RelayClient {
         }
     }
 
-    async readLimitedText(response) {
+    async readLimitedText(response, maxBodyBytes = this.config.maxBodyBytes) {
         const reader = response.body?.getReader();
         if (!reader) return await response.text();
 
@@ -182,9 +219,10 @@ class RelayClient {
             if (done) break;
 
             total += value.byteLength;
-            if (total > this.config.maxBodyBytes) {
+            if (total > maxBodyBytes) {
+                await reader.cancel();
                 throw new Error(
-                    `response body exceeds ${this.config.maxBodyBytes} bytes`,
+                    `response body exceeds ${maxBodyBytes} bytes`,
                 );
             }
             chunks.push(value);

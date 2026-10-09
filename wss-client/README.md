@@ -100,7 +100,7 @@ Copy-Item .\config.example.json .\config.json
 | `token` | 前端生成的 WSS relay token，必填。 |
 | `clientId` | 客户端唯一 ID。多个客户端不要重复。 |
 | `clientName` | 前端里展示用的客户端名称。 |
-| `maxBodyBytes` | 单次抓取响应体最大字节数，默认示例为 5 MB。 |
+| `maxBodyBytes` | 单次抓取响应体最大字节数，默认 5 MiB。更新后的后端总响应上限也是 5 MiB，实际使用两端上限的较小值。 |
 | `fetchTimeoutMs` | 单次抓取超时时间，单位毫秒。 |
 | `reconnectMinMs` | 断线重连最小等待时间。 |
 | `reconnectMaxMs` | 断线重连最大等待时间。 |
@@ -110,6 +110,8 @@ Copy-Item .\config.example.json .\config.json
 | `maxRedirects` | 最大跳转次数。每次跳转后的 URL 都会重新校验。 |
 
 ## 启动
+
+较大响应使用分块传输，仍保留后端单帧 512 KiB 限制。请同时更新后端与 `wss-client`，否则旧客户端回传大响应仍可能断线；新客户端连接旧后端时会明确提示升级，不发送超限消息。
 
 使用默认 `config.json`：
 

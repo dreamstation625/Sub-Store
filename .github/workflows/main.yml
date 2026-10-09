@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    # 自用仓库改由 VERSION 驱动 Docker 发布，保留上游原发布流程。
+    if: github.repository != 'dreamstation625/Sub-Store'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

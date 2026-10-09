@@ -204,8 +204,16 @@ export default async function download(
     const requestTimeout = timeout || defaultTimeout || 8000;
     url = maybePrefixGithubProxyUrl(url, githubProxy, githubProxyRegex);
     const safeUrl = maskDownloadUrl(url);
-    const id = hex_md5(
+    // 不同拉取节点的网络环境不同，不能共用同一份响应缓存。
+    const relayNodeId = `${options?.relayNodeId || ''}`.trim();
+    // 流量查询沿用原有响应头键，不能让节点正文缓存隔离破坏流量自动继承。
+    const headersId = hex_md5(
         `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}`,
+    );
+    const id = hex_md5(
+        `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}${
+            relayNodeId ? `\nrelay:${relayNodeId}` : ''
+        }`,
     );
 
     if ($arguments?.cacheKey === true) {
@@ -214,7 +222,9 @@ export default async function download(
     }
 
     const customCacheKey = $arguments?.cacheKey
-        ? `#sub-store-cached-custom-${$arguments?.cacheKey}`
+        ? `#sub-store-cached-custom-${$arguments?.cacheKey}${
+              relayNodeId ? `-relay-${hex_md5(relayNodeId)}` : ''
+          }`
         : undefined;
 
     if (customCacheKey && !skipCustomCache) {
@@ -402,7 +412,6 @@ export default async function download(
             }\nTimeout: ${requestTimeout}\nProxy: ${proxy}\nInsecure: ${!!insecure}\nPreprocess: ${preprocess}\nURL: ${safeUrl}`,
         );
         try {
-            const relayNodeId = options?.relayNodeId;
             let { body, headers, statusCode } = await runBackendRequestTask(
                 () =>
                     relayNodeId
@@ -433,7 +442,7 @@ export default async function download(
                 const flowInfo = getFlowField(headers);
                 if (flowInfo) {
                     headersResourceCache.set(
-                        id,
+                        headersId,
                         flowInfo,
                         $arguments?.headersCacheTtl
                             ? $arguments?.headersCacheTtl * 1000

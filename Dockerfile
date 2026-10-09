@@ -7,9 +7,10 @@ WORKDIR /src/backend
 
 RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm@11.0.9
 
-COPY backend/package.json backend/pnpm-lock.yaml ./
+COPY backend/package.json backend/pnpm-lock.yaml backend/pnpm-workspace.yaml ./
+COPY backend/patches ./patches
 COPY .node-version /src/.node-version
-RUN pnpm config set dangerouslyAllowAllBuilds true && pnpm install --no-frozen-lockfile
+RUN pnpm config set dangerouslyAllowAllBuilds true && pnpm install --frozen-lockfile
 
 COPY backend/ ./
 RUN pnpm run bundle:esbuild

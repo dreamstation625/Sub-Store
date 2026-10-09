@@ -1,0 +1,151 @@
+name: Docker 发布（VERSION）
+
+on:
+  push:
+    branches: [dev-dream]
+    paths: [VERSION]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 串行发布，避免较早的正式版本晚完成后覆盖新版 latest。
+concurrency:
+  group: docker-publish-dev-dream
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.version.outputs.should_build }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      tags: ${{ steps.version.outputs.tags }}
+      node_version: ${{ steps.version.outputs.node_version }}
+    steps:
+      - name: 检出本次后端提交及历史
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 设置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: 验证版本及内容变化
+        id: version
+        run: node .github/scripts/docker-version.mjs
+
+  publish:
+    needs: version
+    if: needs.version.outputs.should_build == 'true' && github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: DOCKERHUB
+    env:
+      IMAGE: dreamstation625/sub-store
+      IMAGE_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: 检出本次后端提交
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: backend-source
+          persist-credentials: false
+      - name: 检查 Docker Hub 配置
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          test "$DOCKERHUB_USERNAME" = dreamstation625 || { echo '::error::DOCKERHUB 环境变量 DOCKERHUB_USERNAME 应为 dreamstation625'; exit 1; }
+          test -n "$DOCKERHUB_TOKEN" || { echo '::error::DOCKERHUB 环境缺少 DOCKERHUB_TOKEN secret'; exit 1; }
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: 不覆盖已经发布的版本
+        id: existing
+        run: |
+          if result=$(docker manifest inspect "$IMAGE:$IMAGE_VERSION" 2>&1); then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo "版本 $IMAGE_VERSION 已发布，跳过构建且不更新 latest。" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$result" == *"not found"* || "$result" == *"manifest unknown"* || "$result" == *"no such manifest"* ]]; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            echo '::error::无法确认 Docker Hub 版本是否存在；为避免覆盖已发布版本，本次停止。请检查网络与仓库权限后重试。'
+            exit 1
+          fi
+      - name: 检出自用前端分支
+        if: steps.existing.outputs.exists == 'false'
+        uses: actions/checkout@v6
+        with:
+          repository: dreamstation625/Sub-Store-Front-End
+          ref: dev-dream
+          path: frontend-source
+          persist-credentials: false
+      - name: 记录构建来源
+        if: steps.existing.outputs.exists == 'false'
+        id: sources
+        env:
+          BACKEND_SHA: ${{ github.sha }}
+        run: |
+          frontend_sha=$(git -C frontend-source rev-parse HEAD)
+          echo "frontend_sha=$frontend_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo '### 构建来源'
+            echo "- 后端提交：$BACKEND_SHA"
+            echo "- 前端提交：$frontend_sha（dev-dream）"
+            echo "- 版本：$IMAGE_VERSION"
+            echo '- 架构：linux/amd64、linux/arm64'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: 设置多架构模拟器
+        if: steps.existing.outputs.exists == 'false'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - name: 设置 Docker Buildx
+        if: steps.existing.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v4
+      - name: 构建并发布镜像
+        if: steps.existing.outputs.exists == 'false'
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend-source
+          file: ./backend-source/Dockerfile
+          build-contexts: |
+            frontend=./frontend-source
+          build-args: |
+            NODE_VERSION=${{ needs.version.outputs.node_version }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ needs.version.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Sub-Store
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/dreamstation625/Sub-Store
+            io.sub-store.frontend.revision=${{ steps.sources.outputs.frontend_sha }}
+            io.sub-store.frontend.source=https://github.com/dreamstation625/Sub-Store-Front-End
+          cache-from: type=gha,scope=sub-store-dev-dream
+          cache-to: type=gha,mode=max,scope=sub-store-dev-dream
+      - name: 记录发布结果
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          {
+            echo '### 发布完成'
+            echo "- 镜像：$IMAGE:$IMAGE_VERSION"
+            echo "- Digest：$IMAGE_DIGEST"
+            if [ "$PRERELEASE" = true ]; then
+              echo '- 测试版：没有更新 latest'
+            else
+              echo "- 正式版：同时更新 $IMAGE:latest"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

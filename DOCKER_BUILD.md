@@ -11,18 +11,56 @@
 
 运行时默认监听 `3000` 端口，并把数据目录放在 `/opt/app/data`。
 
+### GitHub Actions 自动发布（自用分支）
+
+自用镜像由 `.github/workflows/docker-publish.yml` 发布。仅允许仓库 `dreamstation625/Sub-Store` 的 `dev-dream` 分支，其他仓库、分支、标签和 PR 均不会发布。原上游 `main.yml` 发布流程在此自用仓库禁用，在上游仍保持原行为。
+
+根目录 `VERSION` 是唯一的自动发布触发文件，初始值为 `26.1009.01-pre`。版本格式为 `yy.MMdd.流水号`，日期必须有效，流水号从 `01` 开始、至少两位（同日继续使用 `02`、`03`，超过 `99` 可使用 `100`）。版本由维护者手动修改，不会自动回写代码；它仅控制镜像标签，不修改前后端的上游 `package.json` 版本。
+
+| VERSION | 推送的 Docker Hub 标签 | 是否更新 latest |
+| --- | --- | --- |
+| `26.1009.01-pre` | `dreamstation625/sub-store:26.1009.01-pre` | 否 |
+| `26.1009.01` | `dreamstation625/sub-store:26.1009.01` 和 `dreamstation625/sub-store:latest` | 是 |
+
+发布步骤：
+
+1. 先把需要包含的前端修改提交并推送到 `dreamstation625/Sub-Store-Front-End` 的 `dev-dream` 分支。
+2. 在后端 `dev-dream` 分支修改 `VERSION`，和待发布后端代码一起提交、推送。
+3. 工作流比较推送前后的 `VERSION` 内容；没有变化则跳过，其他代码或前端单独变化不会触发发布。
+4. 构建时检出后端本次提交、前端 `dev-dream` 当前提交，以 `frontend` 命名构建上下文交给现有 Dockerfile。同时构建 `linux/amd64` 和 `linux/arm64`，Node 版本使用后端 `.node-version`。
+
+两端都使用锁定依赖安装；后端安装前会复制 `pnpm-workspace.yaml` 和 `patches`，确保依赖补丁不会遗漏。
+
+在后端 GitHub 仓库的 Settings → Environments 中使用环境 **`DOCKERHUB`**：
+
+- Environment variable：`DOCKERHUB_USERNAME=dreamstation625`
+- Environment secret：`DOCKERHUB_TOKEN`，填入有镜像推送权限的 Docker Hub Access Token。
+
+工作流已绑定该环境，通过 `vars.DOCKERHUB_USERNAME` 和 `secrets.DOCKERHUB_TOKEN` 读取配置，不需要把 Token 写进代码。建议在该环境的 Deployment branches 中进一步只允许 `dev-dream`。
+
+已存在的版本标签会直接跳过，绝不重新构建或更新 `latest`。检查标签时若遇到网络、认证等异常则停止，避免把异常误判为“版本不存在”。构建失败且版本尚未发布时可以重跑失败的 Actions；提供的手动入口也受相同仓库、分支和标签检查约束。GitHub 的手动入口要求该工作流文件存在于默认分支；未满足时使用失败运行的 Re-run jobs，或提交新的 VERSION。
+
+构建摘要会记录版本、前后端提交编号、架构和镜像 digest。镜像标签 `org.opencontainers.image.version`、`org.opencontainers.image.revision` 和 `io.sub-store.frontend.revision` 也会保存构建来源，方便追溯。前端变化不会自动重新发布旧版本，只有下次修改后端 VERSION 时才打入新镜像。
+
+本地验证发布判断（需要后端现有依赖）：
+
+```bash
+node --test .github/scripts/docker-version.test.mjs
+actionlint .github/workflows/docker-publish.yml .github/workflows/main.yml
+```
+
 ### 构建
 
 在仓库根目录执行：
 
 ```bash
-docker build -t dreamstation625/sub-store:latest .
+docker build --build-context frontend=../Sub-Store-Front-End -t dreamstation625/sub-store:latest .
 ```
 
 如果需要指定 Node.js 版本：
 
 ```bash
-docker build --build-arg NODE_VERSION=22.16.0 -t dreamstation625/sub-store:latest .
+docker build --build-context frontend=../Sub-Store-Front-End --build-arg NODE_VERSION=24.15.0 -t dreamstation625/sub-store:latest .
 ```
 本地使用 PowerShell、Docker Buildx 构建并推送多标签镜像：
 

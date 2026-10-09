@@ -4,6 +4,8 @@ import $ from '@/core/app';
 const MAX_FRAME_BYTES = 512 * 1024;
 const MAX_BUFFER_BYTES = 1024 * 1024;
 const MAX_CLIENTS = 128;
+const MAX_BODY_BYTES = 5 * 1024 * 1024;
+const RESPONSE_CHUNK_BYTES = 128 * 1024;
 
 const clients = new Map();
 const pending = new Map();
@@ -115,6 +117,10 @@ export async function fetchViaWssClient(clientId, request) {
         uac: request.uac,
         headers: request.headers,
         timeout: timeoutMs,
+        ...(client.capabilities.includes('fetch-chunks-v1')
+            ? { responseChunkBytes: RESPONSE_CHUNK_BYTES }
+            : {}),
+        maxBodyBytes: Math.min(client.maxBodyBytes || MAX_BODY_BYTES, MAX_BODY_BYTES),
     };
 
     return await new Promise((resolve, reject) => {
@@ -123,7 +129,7 @@ export async function fetchViaWssClient(clientId, request) {
             reject(new Error(`WSS relay request timeout: ${clientId}`));
         }, timeoutMs + 1000);
 
-        pending.set(id, { clientId, resolve, reject, timeout });
+        pending.set(id, { clientId, resolve, reject, timeout, maxBodyBytes: payload.maxBodyBytes });
 
         try {
             sendJson(client.socket, payload);
@@ -233,6 +239,48 @@ function handleFrame(client, frame) {
 
     if (message.type === 'fetch-result') {
         settleFetchResult(client, message);
+    } else if (['fetch-result-start', 'fetch-result-chunk', 'fetch-result-end'].includes(message.type)) {
+        receiveFetchChunk(client, message);
+    }
+}
+
+// 应用层分块保留单帧上限，按请求校验顺序和总大小；超时、断线时随 pending 一起释放。
+function receiveFetchChunk(client, message) {
+    const item = pending.get(message.id);
+    if (!item || item.clientId !== client.id) return;
+    try {
+        if (message.type === 'fetch-result-start') {
+            if (item.chunks || !Number.isInteger(message.bodyBytes) || message.bodyBytes < 0 || message.bodyBytes > item.maxBodyBytes) {
+                throw new Error('Invalid WSS relay response body size');
+            }
+            item.chunks = [];
+            item.bodyBytes = message.bodyBytes;
+            item.receivedBytes = 0;
+            item.response = { statusCode: message.statusCode, headers: message.headers };
+        } else if (message.type === 'fetch-result-chunk') {
+            if (!item.chunks || item.chunks.length >= Math.ceil(item.bodyBytes / RESPONSE_CHUNK_BYTES) ||
+                message.index !== item.chunks.length || typeof message.data !== 'string' ||
+                !message.data.length || message.data.length > Math.ceil(RESPONSE_CHUNK_BYTES / 3) * 4 ||
+                !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(message.data)) {
+                throw new Error('Invalid WSS relay response chunk');
+            }
+            const chunk = Buffer.from(message.data, 'base64');
+            item.receivedBytes += chunk.length;
+            if (chunk.length > RESPONSE_CHUNK_BYTES || item.receivedBytes > item.bodyBytes || item.receivedBytes > item.maxBodyBytes) {
+                throw new Error('WSS relay response body exceeds limit');
+            }
+            item.chunks.push(chunk);
+        } else {
+            if (!item.chunks || item.receivedBytes !== item.bodyBytes) {
+                throw new Error('Incomplete WSS relay response body');
+            }
+            settleFetchResult(client, {
+                id: message.id, ok: true, ...item.response,
+                body: Buffer.concat(item.chunks, item.receivedBytes).toString('utf8'),
+            });
+        }
+    } catch (error) {
+        settleFetchResult(client, { id: message.id, ok: false, error: { message: error.message } });
     }
 }
 
@@ -241,6 +289,8 @@ function settleFetchResult(client, message) {
     if (!item) return;
     if (item.clientId !== client.id) {
         item.reject(new Error(`WSS relay response client mismatch: ${client.id}`));
+    } else if (message.ok && Buffer.byteLength(message.body || '', 'utf8') > item.maxBodyBytes) {
+        item.reject(new Error('WSS relay response body exceeds limit'));
     } else if (message.ok) {
         item.resolve({
             statusCode: message.statusCode || 200,
