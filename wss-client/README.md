@@ -48,7 +48,7 @@ ws://127.0.0.1:3000/ws/relay
 - 能访问你的 Sub-Store 后端 WebSocket 地址。
 - 能访问需要抓取的订阅源。
 
-不需要安装额外依赖；客户端使用 Node.js 内置的 `fetch` 和 `WebSocket`。
+不需要安装额外依赖；客户端使用 Node.js 内置的 HTTP / HTTPS 和 `WebSocket`。订阅请求将 DNS 校验得到的地址固定用于实际连接，仍使用原域名进行 Host 和 HTTPS 证书校验，并保留 gzip、deflate、br 解压支持。
 
 ## 生成连接 Token
 
@@ -85,6 +85,12 @@ Copy-Item .\config.example.json .\config.json
   "fetchTimeoutMs": 15000,
   "reconnectMinMs": 1000,
   "reconnectMaxMs": 30000,
+  "heartbeatIntervalMs": 30000,
+  "pongTimeoutMs": 10000,
+  "connectTimeoutMs": 15000,
+  "maxConcurrentFetches": 4,
+  "maxQueuedFetches": 32,
+  "logUrlPaths": false,
   "allowedProtocols": ["https:"],
   "allowedHosts": [],
   "allowPrivateNetwork": false,
@@ -101,13 +107,21 @@ Copy-Item .\config.example.json .\config.json
 | `clientId` | 客户端唯一 ID。多个客户端不要重复。 |
 | `clientName` | 前端里展示用的客户端名称。 |
 | `maxBodyBytes` | 单次抓取响应体最大字节数，默认 5 MiB。更新后的后端总响应上限也是 5 MiB，实际使用两端上限的较小值。 |
-| `fetchTimeoutMs` | 单次抓取超时时间，单位毫秒。 |
+| `fetchTimeoutMs` | 默认任务超时，单位毫秒。从收到任务开始，包含排队、DNS、所有跳转、读取和回传；后端下发的 `timeout` 可指定该任务的时间。 |
 | `reconnectMinMs` | 断线重连最小等待时间。 |
 | `reconnectMaxMs` | 断线重连最大等待时间。 |
+| `heartbeatIntervalMs` | 心跳间隔，默认 30000 毫秒。连接建立后立即发送第一次 ping。 |
+| `pongTimeoutMs` | 等待后端 pong 的超时，默认 10000 毫秒。超时主动关闭旧连接并重连，只有收到 pong 才重置重连退避。 |
+| `connectTimeoutMs` | WebSocket 握手超时，默认 15000 毫秒。 |
+| `maxConcurrentFetches` | 同时执行的抓取数，默认 4。 |
+| `maxQueuedFetches` | 等待队列上限，默认 32；设为 0 不排队。满载时立即返回错误。断线或退出会取消该连接的所有任务。 |
+| `logUrlPaths` | 默认 `false`，日志隐藏 URL 路径、所有查询值及凭据。排查时可设为 `true` 显示路径，但路径中的订阅 Token 也可能暴露。查询值仍脱敏。 |
 | `allowedProtocols` | 允许抓取的 URL 协议，默认只允许 `https:`。 |
-| `allowedHosts` | 显式允许的主机名列表。留空表示不按域名白名单限制。 |
+| `allowedHosts` | 精确匹配的可信主机例外，允许这些主机解析到内网地址。为兼容旧配置，这不是“仅允许这些域名”的全局白名单；其他公网主机仍可访问。 |
 | `allowPrivateNetwork` | 是否允许请求内网、回环、链路本地等私有地址。默认 `false`。 |
-| `maxRedirects` | 最大跳转次数。每次跳转后的 URL 都会重新校验。 |
+| `maxRedirects` | 最大跳转次数，默认 3；设为 0 禁止跳转。每次跳转重新校验地址，跨源跳转移除凭据头，旧响应及时取消。 |
+
+旧配置可以继续使用，新增字段会采用默认值。默认拒绝私有 IPv4、IPv6 回环、ULA、链路本地、映射内网地址及常见转换前缀；确需访问时使用精确的 `allowedHosts` 例外或明确开启 `allowPrivateNetwork`。请求中的 `Host` 始终取自目标 URL，URL 中的用户名 / 密码不受支持，请使用请求头传递认证信息。
 
 ## 启动
 
@@ -129,7 +143,7 @@ npm start -- .\node-2.json
 连接成功后会看到类似日志：
 
 ```text
-[sub-store-wss-client] connecting to wss://sub-store.example.com/ws/relay?token=***
+[sub-store-wss-client] connecting to wss://sub-store.example.com/***?token=***&clientId=***&clientName=***
 [sub-store-wss-client] connected
 ```
 
@@ -194,7 +208,13 @@ http://服务器IP:3000
 - 默认只允许抓取 `https:`，不建议随意加入 `http:`。
 - 默认禁止访问私有网络地址，除非你明确需要抓内网资源。
 - 如果开启 `allowPrivateNetwork: true`，请只在可信环境使用。
-- `allowedHosts` 可用于限制客户端只抓指定域名。
+- `allowedHosts` 不是全局域名白名单；只添加你确认可信、需要访问内网地址的主机。
+- 跨源跳转不转发 Authorization、Cookie 和常见 Token / API Key 等凭据头。需要另一域名的认证时，请直接使用该域名的订阅地址。
+- 默认隐藏日志路径；不要在含有路径 Token 的订阅上随意开启 `logUrlPaths`。
+
+## 回归测试
+
+在 `wss-client` 目录运行 `npm run check` 和 `npm test`。测试不使用真实订阅或公网，覆盖固定 DNS 地址连接、IPv6 校验、跳转凭据保护、压缩响应限额、任务取消和限流、心跳及握手超时、日志脱敏和回传背压。客户端 Docker 发布前也会执行这些测试。
 
 ## 协议简述
 

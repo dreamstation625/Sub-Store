@@ -37,6 +37,10 @@ jobs:
           node-version-file: .node-version
       - name: 检查客户端语法
         run: node --check wss-client/src/index.js
+      - name: 检查客户端核心语法
+        run: node --check wss-client/src/client.js
+      - name: 运行客户端回归测试
+        run: node --test wss-client/test/*.test.mjs
       - name: 验证客户端版本及内容变化
         id: version
         run: node .github/scripts/docker-version.mjs wss-client

@@ -1,23 +1,17 @@
 import { expect } from 'chai';
-import fs from 'fs';
 import path from 'path';
-import vm from 'vm';
 import { Buffer } from 'buffer';
-
-// 直接运行 CLI 中的原始客户端类，避免为了测试改变客户端启动方式。
-const source = fs.readFileSync(path.resolve(__dirname, '../../../../wss-client/src/index.js'), 'utf8');
-const clientClass = source.slice(source.indexOf('class RelayClient'), source.indexOf('function readConfig()'));
-const scope = {
-    Buffer, WebSocket: { OPEN: 1 }, MAX_FRAME_BYTES: 512 * 1024, MAX_CHUNK_BYTES: 128 * 1024,
-    process: { on() {} }, setTimeout, Date,
-    positiveInt(value, fallback) { return Number.isInteger(value) && value > 0 ? value : fallback; },
-};
-vm.createContext(scope);
-vm.runInContext(`${clientClass}\nglobalThis.Client = RelayClient;`, scope);
+import { pathToFileURL } from 'url';
 
 describe('WSS client response protocol', function () {
+    let Client;
+    before(async function () {
+        // 保留原生 ESM 导入，避免后端 Babel 将客户端模块转换为 require。
+        const nativeImport = new Function('specifier', 'return import(specifier)');
+        ({ RelayClient: Client } = await nativeImport(pathToFileURL(path.resolve(__dirname, '../../../../wss-client/src/client.js')).href));
+    });
     function fixture() {
-        const client = new scope.Client({ defaultTimeoutMs: 15000 });
+        const client = new Client({ defaultTimeoutMs: 15000 }, { handleSignals: false });
         const messages = [];
         const ws = { readyState: 1, bufferedAmount: 0, send: (message) => messages.push(JSON.parse(message)) };
         return { client, ws, messages };

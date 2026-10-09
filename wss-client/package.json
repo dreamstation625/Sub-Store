@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js && node --check src/client.js",
+    "test": "node --test test/*.test.mjs"
   },
   "license": "GPL-3.0"
 }

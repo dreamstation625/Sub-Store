@@ -227,6 +227,8 @@ test('客户端工作流使用独立版本、镜像、上下文和队列，并�
     assert.equal(workflow.jobs.version.steps.find((step) => step.id === 'version').run,
         'node .github/scripts/docker-version.mjs wss-client');
     assert.ok(workflow.jobs.version.steps.some((step) => step.run === 'node --check wss-client/src/index.js'));
+    assert.ok(workflow.jobs.version.steps.some((step) => step.run === 'node --check wss-client/src/client.js'));
+    assert.ok(workflow.jobs.version.steps.some((step) => step.run === 'node --test wss-client/test/*.test.mjs'));
     assert.equal(workflow.jobs.version.steps[0].with['fetch-depth'], 0);
     assert.equal(workflow.jobs.publish.environment, 'DOCKERHUB');
     assert.equal(workflow.jobs.publish.env.IMAGE, CLIENT_IMAGE);
