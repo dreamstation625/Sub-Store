@@ -193,6 +193,9 @@ describe('mihomo config file routes', function () {
             os.tmpdir(),
             `sub-store-mihomo-config-${Date.now()}.yaml`,
         );
+        if (process.platform === 'win32') {
+            remoteFilePath = path.toNamespacedPath(remoteFilePath).replace(/\\/g, '/');
+        }
         fs.writeFileSync(
             remoteFilePath,
             'mixed-port: 7890\n' +

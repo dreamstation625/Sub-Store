@@ -8,6 +8,7 @@ WORKDIR /src/backend
 RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm@11.0.9
 
 COPY backend/package.json backend/pnpm-lock.yaml ./
+COPY .node-version /src/.node-version
 RUN pnpm config set dangerouslyAllowAllBuilds true && pnpm install --no-frozen-lockfile
 
 COPY backend/ ./

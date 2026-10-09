@@ -34,7 +34,7 @@ const DEFAULT_IGNORED_NOISE_LOGS = [
 
 function createRouteApp() {
     const handlers = new Map();
-    const methods = ['get', 'delete', 'patch'];
+    const methods = ['get', 'post', 'delete', 'patch'];
 
     const app = {
         handlers,

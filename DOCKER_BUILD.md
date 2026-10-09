@@ -42,6 +42,7 @@ docker run -d \
   --restart unless-stopped \
   -p 3000:3000 \
   -v /vol1/1000/docker/sub-store:/opt/app/data \
+  -e SUB_STORE_CORS_ALLOWED_ORIGINS=https://sub-store.example.com \
   dreamstation625/sub-store:latest
 ```
 
@@ -50,6 +51,14 @@ docker run -d \
 ```text
 http://服务器IP:3000
 ```
+
+`SUB_STORE_CORS_ALLOWED_ORIGINS` 必须填写浏览器实际访问前端的来源（协议、域名或 IP、端口，不包含路径）。上面的域名只是示例；若直接使用 IP 访问，应替换为 `http://服务器IP:3000`。多个来源使用逗号分隔，例如：
+
+```text
+SUB_STORE_CORS_ALLOWED_ORIGINS=https://sub-store.example.com,http://192.168.1.10:3000
+```
+
+未设置时采用上游默认白名单，仅允许 `https://sub-store.vercel.app`、`http://substore.stash` 和 `https://substore.stash`；自建前端需要显式加入白名单，包括前后端同域的部署。
 
 ### 后端镜像环境变量
 
