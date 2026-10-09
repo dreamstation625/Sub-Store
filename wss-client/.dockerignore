@@ -1,8 +1,8 @@
-.git
-node_modules
-npm-debug.log*
-pnpm-debug.log*
-*.log
-
-# Keep local relay credentials out of the image build context.
-config.json
+# 仅允许构建必需文件；自定义配置文件名也可能包含 relay Token。
+**
+!Dockerfile
+!package.json
+!VERSION
+!config.example.json
+!src/
+!src/**

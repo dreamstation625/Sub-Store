@@ -46,7 +46,7 @@
 
 ```bash
 node --test .github/scripts/docker-version.test.mjs
-actionlint .github/workflows/docker-publish.yml .github/workflows/main.yml
+actionlint .github/workflows/docker-publish.yml .github/workflows/wss-client-docker-publish.yml .github/workflows/main.yml
 ```
 
 ### 构建
@@ -149,6 +149,31 @@ CMD ["sh", "-c", "HOST=${HTTP_META_HOST} PORT=${HTTP_META_PORT} node /opt/app/ht
 ## wss-client 镜像
 
 `wss-client/Dockerfile` 会构建一个独立的 WebSocket 中继客户端镜像。
+
+### GitHub Actions 独立发布
+
+工作流 `.github/workflows/wss-client-docker-publish.yml`（WSS Client Docker 发布（VERSION））仅在 `dreamstation625/Sub-Store` 的 `dev-dream` 分支运行。自动触发文件是 **`wss-client/VERSION`**，初始值为 `26.1009.01-pre`，格式及标签规则与主镜像相同，流水号独立管理。
+
+| 客户端 VERSION | 推送的 Docker Hub 标签 | 是否更新 latest |
+| --- | --- | --- |
+| `26.1009.01-pre` | `dreamstation625/sub-store-wss-client:26.1009.01-pre` | 否 |
+| `26.1009.01` | `dreamstation625/sub-store-wss-client:26.1009.01` 和 `dreamstation625/sub-store-wss-client:latest` | 是 |
+
+修改客户端代码后，递增 `wss-client/VERSION`，一起提交推送即可发布。单独修改根目录 `VERSION` 不会触发客户端构建；单独修改客户端版本也不会触发主镜像构建。如果需要同时发布两个镜像，应分别修改两个版本文件。
+
+客户端不构建前端、不安装额外依赖，构建上下文仅为 `./wss-client`；Node.js 版本使用根目录 `.node-version`，输出 amd64、arm64 两种架构。镜像内 `/app/VERSION` 与镜像版本标签一致，`package.json` 的原版本保持不变。构建上下文采用允许列表，只包含源码、示例配置和必要构建文件，不上传本地连接配置或 Token。
+
+沿用环境 **`DOCKERHUB`** 的 `DOCKERHUB_USERNAME` 与 `DOCKERHUB_TOKEN`，需要确认该 Token 对 `dreamstation625/sub-store-wss-client` 也有推送权限。不需要新增 Action 白名单条目，使用的组件与主镜像一致。
+
+已发布的客户端版本会跳过，不覆盖版本标签或 `latest`；查询 Docker Hub 出现网络或认证异常时会停止。可重跑的失败任务使用 Re-run jobs；启动前失败且无重跑按钮时，修复权限后递增客户端版本重新触发。手动 Run workflow 入口仍要求工作流文件位于默认分支；不要为此合并整个 `dev-dream` 到 `master`。
+
+初次发布是测试版，不会创建 `latest`。部署时使用实际的测试版标签；只有首次正式发布后才能使用下方示例中的 `latest`。
+
+```bash
+docker run -d --name sub-store-wss-client --restart unless-stopped \
+  -v /vol1/1000/docker/wss-client:/app/config \
+  dreamstation625/sub-store-wss-client:26.1009.01-pre
+```
 
 镜像内启动命令固定读取：
 

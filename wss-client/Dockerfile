@@ -8,6 +8,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json ./
+COPY VERSION ./
 COPY config.example.json ./
 COPY src ./src
 

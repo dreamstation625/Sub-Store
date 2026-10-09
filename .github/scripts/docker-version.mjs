@@ -7,9 +7,19 @@ import { fileURLToPath } from 'node:url';
 export const REPOSITORY = 'dreamstation625/Sub-Store';
 export const RELEASE_REF = 'refs/heads/dev-dream';
 export const IMAGE = 'dreamstation625/sub-store';
+export const CLIENT_IMAGE = 'dreamstation625/sub-store-wss-client';
+const TARGETS = {
+    main: { versionFile: 'VERSION', image: IMAGE },
+    'wss-client': { versionFile: 'wss-client/VERSION', image: CLIENT_IMAGE },
+};
+
+function getTarget(name) {
+    assert.ok(Object.hasOwn(TARGETS, name), '未知的 Docker 发布目标');
+    return TARGETS[name];
+}
 
 // 镜像版本独立于上游 package.json；日期必须有效，流水号至少两位且从 01 开始。
-export function parseVersion(text) {
+export function parseVersion(text, image = IMAGE) {
     const version = text.trim();
     assert.ok(version.length <= 128, 'VERSION 超出 Docker 标签长度上限');
     const match = /^(\d{2})\.(\d{2})(\d{2})\.(0[1-9]|[1-9]\d+)(-pre)?$/.exec(version);
@@ -20,39 +30,44 @@ export function parseVersion(text) {
     const date = new Date(Date.UTC(year, month - 1, day));
     assert.ok(date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day, 'VERSION 日期无效');
     const prerelease = Boolean(match[5]);
-    return { version, prerelease, tags: [`${IMAGE}:${version}`, ...(prerelease ? [] : [`${IMAGE}:latest`])] };
+    return { version, prerelease, tags: [`${image}:${version}`, ...(prerelease ? [] : [`${image}:latest`])] };
 }
 
-export function evaluateVersion({ repository, ref, eventName, current, previous }) {
+export function evaluateVersion({ repository, ref, eventName, current, previous, target = 'main' }) {
+    const { image } = getTarget(target);
     if (repository !== REPOSITORY || ref !== RELEASE_REF) {
         return { shouldBuild: false, reason: '不是指定仓库的 dev-dream 分支' };
     }
     if (!['push', 'workflow_dispatch'].includes(eventName)) {
         return { shouldBuild: false, reason: '不支持此触发事件' };
     }
-    const result = parseVersion(current);
+    const result = parseVersion(current, image);
     // 手动入口仅用于失败重试；发布任务还会检查 Docker Hub，绝不覆盖已发布版本。
     const shouldBuild = eventName === 'workflow_dispatch' || current.trim() !== previous?.trim();
     return { ...result, shouldBuild, reason: shouldBuild ? '新版本或未发布版本重试' : 'VERSION 内容未变化，跳过构建' };
 }
 
-export function readPreviousVersion(commit, cwd = process.cwd()) {
+export function readPreviousVersion(commit, cwd = process.cwd(), versionFile = 'VERSION') {
+    assert.ok(Object.values(TARGETS).some((target) => target.versionFile === versionFile), '无效的版本文件路径');
     if (!commit || /^0+$/.test(commit)) return undefined;
     assert.match(commit, /^[a-f0-9]{40}$/, '无效的推送前提交编号');
     // 若前提交不可读取则失败退出，不把网络或历史缺失误判为新版本。
     execFileSync('git', ['cat-file', '-e', `${commit}^{commit}`], { cwd, stdio: 'pipe' });
-    const entry = execFileSync('git', ['ls-tree', '--name-only', commit, '--', 'VERSION'], { cwd, encoding: 'utf8' }).trim();
-    return entry ? execFileSync('git', ['show', `${commit}:VERSION`], { cwd, encoding: 'utf8' }) : undefined;
+    const entry = execFileSync('git', ['ls-tree', '--name-only', commit, '--', versionFile], { cwd, encoding: 'utf8' }).trim();
+    return entry ? execFileSync('git', ['show', `${commit}:${versionFile}`], { cwd, encoding: 'utf8' }) : undefined;
 }
 
 function main() {
+    const target = process.argv[2] || 'main';
+    const { versionFile, image } = getTarget(target);
     const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
     const result = evaluateVersion({
         repository: process.env.GITHUB_REPOSITORY,
         ref: process.env.GITHUB_REF,
         eventName: process.env.GITHUB_EVENT_NAME,
-        current: fs.readFileSync('VERSION', 'utf8'),
-        previous: process.env.GITHUB_EVENT_NAME === 'push' ? readPreviousVersion(event.before) : undefined,
+        target,
+        current: fs.readFileSync(versionFile, 'utf8'),
+        previous: process.env.GITHUB_EVENT_NAME === 'push' ? readPreviousVersion(event.before, process.cwd(), versionFile) : undefined,
     });
     const nodeVersion = fs.readFileSync('.node-version', 'utf8').trim();
     assert.match(nodeVersion, /^\d+\.\d+\.\d+$/, '无效的 .node-version');
@@ -63,7 +78,7 @@ function main() {
         `node_version=${nodeVersion}`,
         'tags<<DOCKER_TAGS', ...(result.tags || []), 'DOCKER_TAGS', '',
     ].join('\n'));
-    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Docker 发布检查\n\n${result.reason}\n\n版本：\`${result.version || '无'}\`\n`);
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Docker 发布检查\n\n${result.reason}\n\n镜像：\`${image}\`\n\n版本文件：\`${versionFile}\`\n\n版本：\`${result.version || '无'}\`\n`);
     console.log(result.reason);
 }
 

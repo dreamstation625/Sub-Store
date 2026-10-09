@@ -133,6 +133,16 @@ npm start -- .\node-2.json
 [sub-store-wss-client] connected
 ```
 
+## Docker 自动发布
+
+客户端使用独立版本文件 `wss-client/VERSION`，初始版本 `26.1009.01-pre`，版本格式为 `yy.MMdd.流水号`（至少两位，从 `01` 开始），测试版加 `-pre`。
+
+在本仓库的 `dev-dream` 分支修改客户端代码并递增该版本文件后，工作流 **WSS Client Docker 发布（VERSION）** 自动构建 amd64、arm64 镜像并推送到 `dreamstation625/sub-store-wss-client`。带 `-pre` 仅发布版本标签；不带 `-pre` 同时发布 `latest`。两个镜像的版本文件、触发条件、缓存和发布队列互相独立，不需要先构建前端。
+
+沿用 GitHub Environment `DOCKERHUB` 的用户名和 Token；Token 必须有客户端镜像仓库的推送权限。已发布版本不会被覆盖，初次测试版不会创建 `latest`，部署时应使用 `dreamstation625/sub-store-wss-client:26.1009.01-pre`。镜像内 `/app/VERSION` 可用于查看发布版本。
+
+完整构建、挂载配置和启动命令见 [Docker 构建和部署](../DOCKER_BUILD.md#wss-client-镜像)。真实配置由宿主机挂载到 `/app/config/config.json`；构建上下文仅允许源码和示例配置，不上传真实 Token。
+
 ## 在 Sub-Store 里使用
 
 1. 启动 Sub-Store 后端。
