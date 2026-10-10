@@ -346,6 +346,7 @@ async function downloadSubscription(req, res) {
                             proxy || sub.proxy,
                             $arguments.flowUrl,
                             $arguments.flowHeaders,
+                            { relayNodeId: sub.relayNodeId },
                         );
                         if (flowInfo) {
                             const headers = normalizeFlowHeader(flowInfo, true);
@@ -384,6 +385,8 @@ async function downloadSubscription(req, res) {
                             undefined,
                             proxy || sub.proxy,
                             sub.subUserinfo,
+                            undefined,
+                            { relayNodeId: sub.relayNodeId },
                         );
                     } catch (e) {
                         $.error(
@@ -670,6 +673,7 @@ async function downloadCollection(req, res) {
                                     proxy || sub.proxy || collection.proxy,
                                     $arguments.flowUrl,
                                     $arguments.flowHeaders,
+                                    { relayNodeId: sub.relayNodeId },
                                 );
                             }
                         } catch (err) {
@@ -692,6 +696,8 @@ async function downloadCollection(req, res) {
                                     undefined,
                                     proxy || sub.proxy,
                                     sub.subUserinfo,
+                                    undefined,
+                                    { relayNodeId: sub.relayNodeId },
                                 );
                             } catch (e) {
                                 $.error(
@@ -726,6 +732,8 @@ async function downloadCollection(req, res) {
                             undefined,
                             proxy || collection.proxy,
                             collection.subUserinfo,
+                            undefined,
+                            { relayNodeId: collection.relayNodeId },
                         );
                     } catch (e) {
                         $.error(

@@ -143,9 +143,11 @@ npm start -- .\node-2.json
 连接成功后会看到类似日志：
 
 ```text
-[sub-store-wss-client] connecting to wss://sub-store.example.com/***?token=***&clientId=***&clientName=***
-[sub-store-wss-client] connected
+[2026-10-10T12:30:45.123Z] [sub-store-wss-client] connecting to wss://sub-store.example.com/***?token=***&clientId=***&clientName=***
+[2026-10-10T12:30:45.456Z] [sub-store-wss-client] connected
 ```
+
+普通日志和错误日志均附带毫秒级 UTC 时间（末尾 `Z` 表示 UTC，北京时间为 UTC+8），不依赖宿主机或容器的时区配置，便于对照不同设备的连接、重连和抓取记录。URL 和 Token 仍按原规则脱敏。
 
 ## Docker 自动发布
 
@@ -166,6 +168,8 @@ npm start -- .\node-2.json
 5. 在订阅、文件、同步或预览等支持 relay 的位置选择对应客户端。
 
 当后端需要抓取订阅 URL 时，会通过 WebSocket 下发任务给选中的客户端。
+
+更新后的后端会让流量查询也跟随所选节点，包括订阅更新、网页流量查询、自定义流量链接以及 Mihomo 配置文件。单订阅来源的 Mihomo 文件跟随来源订阅的节点；远程文件跟随文件自身的节点。流量缓存按本机和各个节点分别保存，过期后仍从同一路径重新获取；节点离线时不会偷偷改走后端本机。当前 WSS 协议使用 GET 获取响应头，不走 WSS 时仍保留原来的 HEAD / GET 查询方式。
 
 ## Docker 单容器部署时的地址
 

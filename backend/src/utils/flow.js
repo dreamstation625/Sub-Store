@@ -5,6 +5,17 @@ import { getPolicyDescriptor } from '@/utils';
 import $ from '@/core/app';
 import headersResourceCache from '@/utils/headers-resource-cache';
 import { runBackendRequestTask } from '@/utils/request-concurrency';
+import { fetchViaWssClient } from '@/utils/wss-relay-server';
+
+// 本机沿用旧键；WSS 响应头按节点隔离，并与正文抓取使用同一规则。
+export function getFlowCacheKey(url, userAgent, customHeaders, relayNodeId = '') {
+    const nodeId = `${relayNodeId || ''}`.trim();
+    return hex_md5(
+        `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}${
+            nodeId ? `\nrelay:${nodeId}` : ''
+        }`,
+    );
+}
 
 export function getFlowField(headers) {
     const keys = Object.keys(headers);
@@ -33,7 +44,9 @@ export async function getFlowHeaders(
     customProxy,
     flowUrl,
     flowHeaders,
+    options = {},
 ) {
+    const relayNodeId = `${options?.relayNodeId || ''}`.trim();
     let url = flowUrl || rawUrl || '';
     let $arguments = {};
     const rawArgs = url.split('#');
@@ -102,9 +115,7 @@ export async function getFlowHeaders(
             );
         }
     }
-    const id = hex_md5(
-        `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}`,
-    );
+    const id = getFlowCacheKey(url, userAgent, customHeaders, relayNodeId);
     const cached = headersResourceCache.get(id);
     let flowInfo;
     if (!$arguments?.noCache && cached) {
@@ -116,6 +127,14 @@ export async function getFlowHeaders(
         flowInfo = cached;
     } else {
         const http = HTTP();
+        // 当前 WSS 协议支持 GET：查询响应头也通过节点 GET，不悄悄回退到本机。
+        const relayGet = (request) => fetchViaWssClient(relayNodeId, {
+            url: request.url,
+            uac: request.headers?.['user-agent'] || request.headers?.['User-Agent'] || userAgent,
+            headers: request.headers,
+            timeout: request.timeout,
+        });
+        const flowHttp = relayNodeId ? { get: relayGet, head: relayGet } : http;
         if (flowUrl) {
             let flowUrlHeaders;
             try {
@@ -128,7 +147,7 @@ export async function getFlowHeaders(
                 );
                 const { headers, body, statusCode } =
                     await runBackendRequestTask(() =>
-                        http.get({
+                        flowHttp.get({
                             url,
                             headers: customHeaders || {
                                 'User-Agent': userAgent,
@@ -202,14 +221,14 @@ export async function getFlowHeaders(
         } else {
             try {
                 $.info(
-                    `使用 HEAD 方法从响应头获取流量信息: ${url}, ${
+                    `使用 ${relayNodeId ? 'WSS GET' : 'HEAD'} 方法从响应头获取流量信息: ${url}, ${
                         customHeaders
                             ? JSON.stringify(customHeaders)
                             : `User-Agent: ${userAgent || ''}`
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}`,
                 );
                 const { headers } = await runBackendRequestTask(() =>
-                    http.head({
+                    flowHttp.head({
                         url: url
                             .split(/[\r\n]+/)
                             .map((i) => i.trim())
@@ -233,12 +252,12 @@ export async function getFlowHeaders(
                         ...(proxy ? getPolicyDescriptor(proxy) : {}),
                         ...(insecure ? insecure : {}),
                     }),
-                    'flow headers HEAD',
+                    relayNodeId ? 'flow headers WSS GET' : 'flow headers HEAD',
                 );
                 flowInfo = getFlowField(headers);
             } catch (e) {
                 $.error(
-                    `使用 HEAD 方法从响应头获取流量信息失败: ${url}, ${
+                    `使用 ${relayNodeId ? 'WSS GET' : 'HEAD'} 方法从响应头获取流量信息失败: ${url}, ${
                         customHeaders
                             ? JSON.stringify(customHeaders)
                             : `User-Agent: ${userAgent || ''}`
@@ -247,7 +266,7 @@ export async function getFlowHeaders(
                     }`,
                 );
             }
-            if (!flowInfo) {
+            if (!flowInfo && !relayNodeId) {
                 $.info(
                     `使用 GET 方法获取流量信息: ${url}, ${
                         customHeaders
@@ -256,7 +275,7 @@ export async function getFlowHeaders(
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}`,
                 );
                 const { headers } = await runBackendRequestTask(() =>
-                    http.get({
+                    flowHttp.get({
                         url: url
                             .split(/[\r\n]+/)
                             .map((i) => i.trim())

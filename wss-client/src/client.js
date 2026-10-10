@@ -386,8 +386,8 @@ export class RelayClient {
         return text.replace(/[\r\n]/g, ' ').slice(0, 512);
     }
 
-    log(message) { console.log(`[sub-store-wss-client] ${message}`); }
-    error(message) { console.error(`[sub-store-wss-client] ${message}`); }
+    log(message) { console.log(`[${new Date().toISOString()}] [sub-store-wss-client] ${message}`); }
+    error(message) { console.error(`[${new Date().toISOString()}] [sub-store-wss-client] ${message}`); }
 }
 
 export function readConfig(configPath = process.argv[2] || DEFAULT_CONFIG_PATH) {

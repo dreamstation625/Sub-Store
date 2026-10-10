@@ -86,12 +86,17 @@ function getLinkArguments(rawUrl) {
 }
 
 function resolveFileFlowRequest(file) {
+    // 单订阅配置的正文由订阅节点抓取，流量查询也跟随该来源节点。
+    const relayNodeId = file.sourceType === 'subscription'
+        ? findByName($.read(SUBS_KEY) || [], file.sourceName)?.relayNodeId
+        : file.relayNodeId;
     // 文件手动设置始终优先于来源自动继承。
     if (file.subInfoUrl) {
         return {
             url: file.subInfoUrl,
             userAgent: file.subInfoUserAgent,
             proxy: file.proxy,
+            relayNodeId,
         };
     }
 
@@ -106,6 +111,7 @@ function resolveFileFlowRequest(file) {
             url,
             userAgent: file.subInfoUserAgent || linkArguments.flowUserAgent,
             proxy: file.proxy,
+            relayNodeId,
             flowUrl: linkArguments.flowUrl,
             flowHeaders: linkArguments.flowHeaders,
         };
@@ -132,6 +138,7 @@ function resolveFileFlowRequest(file) {
         url,
         userAgent: file.subInfoUserAgent || linkArguments.flowUserAgent,
         proxy: file.proxy || subscription.proxy,
+        relayNodeId,
         flowUrl: linkArguments.flowUrl,
         flowHeaders: linkArguments.flowHeaders,
     };
@@ -408,6 +415,7 @@ async function getFile(req, res, next) {
                         flowRequest.proxy,
                         flowRequest.flowUrl,
                         flowRequest.flowHeaders,
+                        { relayNodeId: flowRequest.relayNodeId },
                     );
                     if (flowInfo) {
                         const headers = normalizeFlowHeader(flowInfo, true);

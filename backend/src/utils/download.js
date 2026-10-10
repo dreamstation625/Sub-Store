@@ -6,6 +6,7 @@ import resourceCache from '@/utils/resource-cache';
 import headersResourceCache from '@/utils/headers-resource-cache';
 import {
     getFlowField,
+    getFlowCacheKey,
     getFlowHeaders,
     parseFlowHeaders,
     validCheck,
@@ -206,15 +207,8 @@ export default async function download(
     const safeUrl = maskDownloadUrl(url);
     // 不同拉取节点的网络环境不同，不能共用同一份响应缓存。
     const relayNodeId = `${options?.relayNodeId || ''}`.trim();
-    // 流量查询沿用原有响应头键，不能让节点正文缓存隔离破坏流量自动继承。
-    const headersId = hex_md5(
-        `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}`,
-    );
-    const id = hex_md5(
-        `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}${
-            relayNodeId ? `\nrelay:${relayNodeId}` : ''
-        }`,
-    );
+    const headersId = getFlowCacheKey(url, userAgent, customHeaders, relayNodeId);
+    const id = headersId;
 
     if ($arguments?.cacheKey === true) {
         $.error(`使用自定义缓存时 cacheKey 的值不能为空`);
@@ -527,6 +521,7 @@ export default async function download(
                     proxy,
                     $arguments.flowUrl,
                     $arguments.flowHeaders,
+                    { relayNodeId },
                 ),
             ),
         );

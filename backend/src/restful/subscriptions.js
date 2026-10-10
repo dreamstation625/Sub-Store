@@ -91,6 +91,8 @@ async function getFlowInfo(req, res) {
                         undefined,
                         sub.proxy,
                         sub.subUserinfo,
+                        undefined,
+                        { relayNodeId: sub.relayNodeId },
                     );
                 } catch (e) {
                     $.error(
@@ -177,6 +179,7 @@ async function getFlowInfo(req, res) {
             sub.proxy,
             $arguments.flowUrl,
             $arguments.flowHeaders,
+            { relayNodeId: sub.relayNodeId },
         );
         if (!flowHeaders && !sub.subUserinfo) {
             failed(
@@ -204,6 +207,8 @@ async function getFlowInfo(req, res) {
                         undefined,
                         sub.proxy,
                         sub.subUserinfo,
+                        undefined,
+                        { relayNodeId: sub.relayNodeId },
                     );
                 } catch (e) {
                     $.error(

@@ -349,6 +349,21 @@ test('配置支持零跳转 / 零排队，非法数值回退，重连最大值�
     assert.throws(() => readConfig(file), /token must be/);
 });
 
+test('普通和错误日志均包含毫秒级 UTC 时间，保留客户端标识和消息', (t) => {
+    const { client } = fixture();
+    const logs = [], errors = [];
+    t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-10T12:30:45.123Z') });
+    t.mock.method(console, 'log', (message) => logs.push(message));
+    t.mock.method(console, 'error', (message) => errors.push(message));
+    RelayClient.prototype.log.call(client, 'connected');
+    RelayClient.prototype.error.call(client, 'connection closed code=1006');
+    assert.deepEqual(logs, ['[2026-10-10T12:30:45.123Z] [sub-store-wss-client] connected']);
+    assert.deepEqual(errors, ['[2026-10-10T12:30:45.123Z] [sub-store-wss-client] connection closed code=1006']);
+    t.mock.timers.tick(1500);
+    RelayClient.prototype.log.call(client, 'reconnecting');
+    assert.equal(logs[1], '[2026-10-10T12:30:46.623Z] [sub-store-wss-client] reconnecting');
+});
+
 test('日志默认隐藏路径、所有查询值及 URL 凭据，错误中的 token 也脱敏', () => {
     const { client } = fixture();
     const input = 'https://user:password@example.test/path-secret?access_token=query-secret&key=other-secret#hash-secret';
