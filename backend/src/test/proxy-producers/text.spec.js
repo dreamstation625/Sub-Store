@@ -5777,6 +5777,89 @@ describe('Proxy text producers', function () {
         );
     });
 
+    it('percent-encodes the URI Trojan password', function () {
+        const proxy = {
+            type: 'trojan',
+            name: 'URI Trojan Password',
+            server: 'trojan.example.com',
+            port: 443,
+            password: 'p@ss:w/rd#1?',
+            tls: true,
+            sni: 'trojan.example.com',
+        };
+        const output = produceExternal('URI', proxy);
+
+        expect(output).to.equal(
+            'trojan://p%40ss%3Aw%2Frd%231%3F@trojan.example.com:443?sni=trojan.example.com#URI%20Trojan%20Password',
+        );
+        const [parsed] = ProxyUtils.parse(output);
+        expect(parsed.server).to.equal('trojan.example.com');
+        expect(parsed.password).to.equal('p@ss:w/rd#1?');
+    });
+
+    it('percent-encodes the URI AnyTLS password', function () {
+        const output = produceExternal('URI', {
+            type: 'anytls',
+            name: 'URI AnyTLS Password',
+            server: 'anytls.example.com',
+            port: 443,
+            password: 'p@ss:w/rd#1?',
+            sni: 'anytls.example.com',
+        });
+
+        expect(
+            output.startsWith(
+                'anytls://p%40ss%3Aw%2Frd%231%3F@anytls.example.com:443?',
+            ),
+        ).to.equal(true);
+        const [parsed] = ProxyUtils.parse(output);
+        expect(parsed.server).to.equal('anytls.example.com');
+        expect(parsed.password).to.equal('p@ss:w/rd#1?');
+    });
+
+    for (const password of ['p%40ss', 'p%ss']) {
+        it(`round-trips the URI AnyTLS password ${password}`, function () {
+            const output = produceExternal('URI', {
+                type: 'anytls',
+                name: 'URI AnyTLS Password',
+                server: 'anytls.example.com',
+                port: 443,
+                password,
+                sni: 'anytls.example.com',
+            });
+
+            const parsed = ProxyUtils.parse(output);
+            expect(parsed).to.have.length(1);
+            expect(parsed[0].password).to.equal(password);
+        });
+    }
+
+    it('keeps every h2 host in URI VMess links', function () {
+        const output = produceExternal('URI', {
+            type: 'vmess',
+            name: 'URI VMess H2',
+            server: 'vmess.example.com',
+            port: 443,
+            uuid: UUID,
+            alterId: 0,
+            cipher: 'auto',
+            tls: true,
+            network: 'h2',
+            'h2-opts': {
+                path: '/h2',
+                host: ['a.example.com', 'b.example.com'],
+            },
+        });
+
+        const json = JSON.parse(Base64.decode(output.replace('vmess://', '')));
+        expect(json.host).to.equal('a.example.com,b.example.com');
+        const [parsed] = ProxyUtils.parse(output);
+        expect(parsed['h2-opts'].host).to.deep.equal([
+            'a.example.com',
+            'b.example.com',
+        ]);
+    });
+
     it('produces URI Trojan links with vcn from the sidecar', function () {
         const output = produceExternal('URI', {
             type: 'trojan',
