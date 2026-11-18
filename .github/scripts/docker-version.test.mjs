@@ -219,11 +219,8 @@ test('客户端工作流使用独立版本、镜像、上下文和队列，并�
     assert.equal(workflow.permissions.contents, 'read');
     assert.equal(workflow.concurrency['cancel-in-progress'], false);
     assert.notEqual(workflow.concurrency.group, main.concurrency.group);
-    for (const job of Object.values(workflow.jobs)) {
-        assert.match(job.if, /github.repository == 'dreamstation625\/Sub-Store'/);
-        assert.match(job.if, /github.ref == 'refs\/heads\/dev-dream'/);
-    }
-    assert.match(workflow.jobs.publish.if, /needs.version.outputs.should_build == 'true'/);
+    // 2026-11-18 起 dev-dream 的两个 Docker 工作流统一停用（if: false），恢复发布时再改回仓库和分支判断。
+    for (const job of [...Object.values(workflow.jobs), ...Object.values(main.jobs)]) assert.equal(job.if, false);
     assert.equal(workflow.jobs.version.steps.find((step) => step.id === 'version').run,
         'node .github/scripts/docker-version.mjs wss-client');
     assert.ok(workflow.jobs.version.steps.some((step) => step.run === 'node --check wss-client/src/index.js'));

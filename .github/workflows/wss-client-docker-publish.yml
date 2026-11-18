@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   version:
-    if: github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    # 2026-11-18 停用：dev-dream 分支整体退役，客户端镜像不再从该分支发布。
+    # 恢复时改回：if: github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    if: false
     runs-on: ubuntu-latest
     outputs:
       should_build: ${{ steps.version.outputs.should_build }}
@@ -47,7 +49,8 @@ jobs:
 
   publish:
     needs: version
-    if: needs.version.outputs.should_build == 'true' && github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    # 2026-11-18 停用：与 version 任务一起跳过。
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: DOCKERHUB

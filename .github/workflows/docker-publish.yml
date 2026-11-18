@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   version:
-    if: github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    # 2026-11-18 停用：镜像发布已迁到 dream27（dreamstation625/sub-store-27）。
+    # 恢复时改回：if: github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    if: false
     runs-on: ubuntu-latest
     outputs:
       should_build: ${{ steps.version.outputs.should_build }}
@@ -41,7 +43,8 @@ jobs:
 
   publish:
     needs: version
-    if: needs.version.outputs.should_build == 'true' && github.repository == 'dreamstation625/Sub-Store' && github.ref == 'refs/heads/dev-dream'
+    # 2026-11-18 停用：与 version 任务一起跳过，避免向 dreamstation625/sub-store 继续发布。
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: DOCKERHUB
