@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    apiJson,
+    apiRequest,
+    login,
+    parseImage,
+    resolveApi,
+} from './docker-hub-api.mjs';
 
-const DEFAULT_API = 'https://hub.docker.com/v2';
 // 与 docker-version.mjs 的 VERSION 格式一致；不符合的标签视为残留或无效标签。
 const VERSION_TAG = /^\d{2}\.\d{2}\d{2}\.(0[1-9]|[1-9]\d+)(-pre)?$/;
 const ALWAYS_KEEP = ['latest'];
@@ -37,25 +43,11 @@ function describe(tags) {
     return tags.length > 40 ? `${shown} …（共 ${tags.length} 个）` : shown;
 }
 
-async function callApi(url, { method = 'GET', token, body } = {}) {
-    const response = await fetch(url, {
-        method,
-        headers: {
-            accept: 'application/json',
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(body ? { 'content-type': 'application/json' } : {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    });
-    assert.ok(response.ok, `${method} ${url} 返回 ${response.status} ${response.statusText}`);
-    return response;
-}
-
 async function listTags(api, repository, token) {
     const tags = [];
     let url = `${api}/repositories/${repository}/tags/?page_size=100&ordering=last_updated`;
     for (let page = 0; url && page < MAX_PAGES; page += 1) {
-        const body = await (await callApi(url, { token })).json();
+        const body = await apiJson(url, { token });
         tags.push(...(body.results || []).map(({ name, last_updated }) => ({ name, last_updated })));
         url = body.next;
     }
@@ -64,39 +56,35 @@ async function listTags(api, repository, token) {
 }
 
 async function deleteTag(api, repository, tag, token) {
-    const response = await fetch(`${api}/repositories/${repository}/tags/${encodeURIComponent(tag)}/`, {
-        method: 'DELETE',
-        headers: { accept: 'application/json', authorization: `Bearer ${token}` },
-    });
+    const response = await apiRequest(
+        `${api}/repositories/${repository}/tags/${encodeURIComponent(tag)}/`,
+        { method: 'DELETE', token },
+    );
     // 并发删除或人工已清理时视为完成，其他错误必须停止，避免误判为已清理。
     assert.ok(response.status === 204 || response.status === 404, `删除标签 ${tag} 失败：${response.status} ${response.statusText}`);
     return response.status === 204;
 }
 
 function readConfig() {
-    const image = process.env.IMAGE?.trim();
-    assert.ok(image, '缺少 IMAGE');
-    const [namespace, name, ...rest] = image.split('/');
-    assert.ok(namespace && name && rest.length === 0, `IMAGE 必须是 命名空间/仓库，当前为 ${image}`);
+    const { repository } = parseImage(process.env.IMAGE);
     const keep = Number(process.env.KEEP_TAGS ?? 10);
     assert.ok(Number.isInteger(keep) && keep >= 1, 'KEEP_TAGS 必须是大于 0 的整数');
     const username = process.env.DOCKERHUB_USERNAME;
     assert.ok(username && process.env.DOCKERHUB_TOKEN, '缺少 DOCKERHUB_USERNAME 或 DOCKERHUB_TOKEN');
     return {
-        repository: `${namespace}/${name}`,
+        repository,
         keep,
         currentVersion: process.env.IMAGE_VERSION?.trim() || '',
         username,
         password: process.env.DOCKERHUB_TOKEN,
-        api: (process.env.DOCKER_HUB_API || DEFAULT_API).replace(/\/+$/, ''),
+        api: resolveApi(),
         dryRun: process.env.PRUNE_DRY_RUN === 'true',
     };
 }
 
 async function main() {
     const { repository, keep, currentVersion, username, password, api, dryRun } = readConfig();
-    const { token } = await (await callApi(`${api}/users/login/`, { method: 'POST', body: { username, password } })).json();
-    assert.ok(token, 'Docker Hub 登录没有返回令牌');
+    const token = await login({ api, username, password });
 
     const tags = await listTags(api, repository, token);
     const { kept, removed } = selectTags(tags, { keep, currentVersion });

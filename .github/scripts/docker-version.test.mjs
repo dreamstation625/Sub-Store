@@ -131,6 +131,10 @@ test('工作流连接规则、构建来源与标签清理步骤不被遗漏', as
     const login = steps.find((step) => step.uses?.startsWith('docker/login-action'));
     assert.equal(login.with.username, '${{ vars.DOCKERHUB_USERNAME }}');
     assert.equal(login.with.password, '${{ secrets.DOCKERHUB_TOKEN }}');
+    const existing = steps.find((step) => step.id === 'existing');
+    assert.equal(existing.run, 'node backend-source/.github/scripts/docker-tag-exists.mjs');
+    assert.equal(existing.env.DOCKERHUB_USERNAME, '${{ vars.DOCKERHUB_USERNAME }}');
+    assert.equal(existing.env.DOCKERHUB_TOKEN, '${{ secrets.DOCKERHUB_TOKEN }}');
     const frontend = steps.find((step) => step.with?.repository);
     assert.equal(frontend.with.repository, 'dreamstation625/Sub-Store-Front-End');
     assert.equal(frontend.with.ref, 'dream27');
@@ -155,43 +159,4 @@ test('工作流连接规则、构建来源与标签清理步骤不被遗漏', as
     assert.ok(dockerfile.indexOf('COPY backend/patches ./patches') < install);
     assert.match(dockerfile, /COPY --from=frontend/);
     assert.equal(parseVersion(fs.readFileSync(new URL('../../VERSION', import.meta.url), 'utf8')).prerelease, false);
-});
-
-test('实际发布检查脚本：已存在跳过、确实不存在才构建、网络或权限错误停止', async (t) => {
-    const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
-    if (process.platform === 'win32' && !fs.existsSync(bash)) return t.skip('需要 Git Bash');
-    const require = (await import('node:module')).createRequire(import.meta.url);
-    const yaml = require('../../backend/node_modules/yaml');
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sub-store-27-publish-check-'));
-    try {
-        const workflow = yaml.parse(fs.readFileSync(new URL('../workflows/docker-publish-27.yml', import.meta.url), 'utf8'));
-        const script = workflow.jobs.publish.steps.find((step) => step.id === 'existing').run;
-        for (const [result, exitCode, expected] of [
-            ['valid manifest', 0, 'exists=true'],
-            ['manifest unknown', 1, 'exists=false'],
-            ['no such manifest: dreamstation625/sub-store-27:26.1118.01', 1, 'exists=false'],
-            ['image tag not found', 1, 'exists=false'],
-            ['unauthorized: authentication required', 1, undefined],
-            ['dial tcp: network timeout', 1, undefined],
-        ]) {
-            const output = path.join(root, 'outputs.txt');
-            fs.writeFileSync(output, '');
-            const run = spawnSync(bash, ['-e', '-c', `docker() { printf '%s' "$MOCK_RESULT"; return "$MOCK_EXIT"; }\n${script}`], {
-                encoding: 'utf8', env: { ...process.env,
-                    IMAGE, IMAGE_VERSION: '26.1118.01', MOCK_RESULT: result, MOCK_EXIT: String(exitCode),
-                    GITHUB_OUTPUT: output.replaceAll('\\', '/'), GITHUB_STEP_SUMMARY: path.join(root, 'summary.md').replaceAll('\\', '/'),
-                },
-            });
-            if (expected) {
-                assert.equal(run.status, 0, `${result}: ${run.stderr}`);
-                assert.equal(fs.readFileSync(output, 'utf8').trim(), expected);
-            } else {
-                assert.equal(run.status, 1, result);
-                assert.equal(fs.readFileSync(output, 'utf8'), '');
-                assert.match(run.stdout, /::error::/);
-            }
-        }
-    } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-    }
 });

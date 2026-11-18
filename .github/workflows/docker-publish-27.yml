@@ -69,16 +69,10 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: 不覆盖已经发布的版本
         id: existing
-        run: |
-          if result=$(docker manifest inspect "$IMAGE:$IMAGE_VERSION" 2>&1); then
-            echo 'exists=true' >> "$GITHUB_OUTPUT"
-            echo "版本 $IMAGE_VERSION 已发布，跳过构建且不更新 latest。" >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "$result" == *"not found"* || "$result" == *"manifest unknown"* || "$result" == *"no such manifest"* ]]; then
-            echo 'exists=false' >> "$GITHUB_OUTPUT"
-          else
-            echo '::error::无法确认 Docker Hub 版本是否存在；为避免覆盖已发布版本，本次停止。请检查网络与仓库权限后重试。'
-            exit 1
-          fi
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: node backend-source/.github/scripts/docker-tag-exists.mjs
       - name: 检出自用前端分支
         if: steps.existing.outputs.exists == 'false'
         uses: actions/checkout@v6
