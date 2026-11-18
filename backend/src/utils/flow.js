@@ -26,24 +26,17 @@ export function getFlowField(headers) {
         webPage ? `; app_url=${encodeURIComponent(webPage)}` : ''
     }${planName ? `; plan_name=${encodeURIComponent(planName)}` : ''}`;
 }
-export async function getFlowHeaders(
-    rawUrl,
-    ua,
-    timeout,
-    customProxy,
-    flowUrl,
-    flowHeaders,
-) {
-    let url = flowUrl || rawUrl || '';
+// 拆分流量链接与 `#` 之后的参数, 与订阅下载使用同一套解析规则。
+export function splitFlowUrl(rawUrl) {
+    const parts = `${rawUrl ?? ''}`.split('#');
+    const url = parts[0] ?? '';
     let $arguments = {};
-    const rawArgs = url.split('#');
-    url = url.split('#')[0];
-    if (rawArgs.length > 1) {
+    if (parts.length > 1) {
         try {
             // 支持 `#${encodeURIComponent(JSON.stringify({arg1: "1"}))}`
-            $arguments = JSON.parse(decodeURIComponent(rawArgs[1]));
+            $arguments = JSON.parse(decodeURIComponent(parts[1]));
         } catch (e) {
-            for (const pair of rawArgs[1].split('&')) {
+            for (const pair of parts[1].split('&')) {
                 const key = pair.split('=')[0];
                 const value = pair.split('=')[1];
                 // 部分兼容之前的逻辑 const value = pair.split('=')[1] || true;
@@ -54,6 +47,19 @@ export async function getFlowHeaders(
             }
         }
     }
+    return { url, $arguments };
+}
+export async function getFlowHeaders(
+    rawUrl,
+    ua,
+    timeout,
+    customProxy,
+    flowUrl,
+    flowHeaders,
+) {
+    const parsedUrl = splitFlowUrl(flowUrl || rawUrl || '');
+    let url = parsedUrl.url;
+    let $arguments = parsedUrl.$arguments;
     if ($arguments?.noFlow || !/^https?/.test(url)) {
         return;
     }

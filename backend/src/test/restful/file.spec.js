@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { after, before, beforeEach, describe, it } from 'mocha';
 
-import { FILES_KEY } from '@/constants';
+import { COLLECTIONS_KEY, FILES_KEY, SUBS_KEY } from '@/constants';
 
 let $;
 let openApi;
@@ -376,6 +376,265 @@ describe('file routes', function () {
 
         expect(fakeFileRes.statusCode).to.equal(200);
         expect(fakeFileRes.sent).to.equal('from-fake-file');
+    });
+
+    it('mihomo 配置远程来源留空 subInfoUrl 时使用远程链接查询流量', async function () {
+        const fileUrl = `https://example.com/mihomo-remote-${Date.now()}`;
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            type: 'mihomoConfig',
+            sourceType: 'remote',
+            mode: 'config',
+            url: fileUrl,
+            process: [],
+        };
+        const requested = [];
+        openApi.HTTP = () => ({
+            head: async ({ url }) => {
+                requested.push(`HEAD ${url}`);
+                return {
+                    headers: {
+                        'subscription-userinfo':
+                            'upload=1; download=2; total=3; expire=4102444800',
+                        'plan-name': 'VIP 套餐',
+                    },
+                };
+            },
+            get: async ({ url }) => {
+                requested.push(`GET ${url}`);
+                return { body: 'proxies: []', headers: {}, statusCode: 200 };
+            },
+        });
+
+        const res = await requestFile();
+
+        expect(res.headers['subscription-userinfo']).to.equal(
+            'upload=1; download=2; total=3; expire=4102444800',
+        );
+        expect(res.headers['plan-name']).to.equal('VIP 套餐');
+        expect(requested).to.include(`HEAD ${fileUrl}`);
+    });
+
+    it('mihomo 配置订阅来源留空 subInfoUrl 时使用订阅链接查询流量', async function () {
+        const subUrl = `https://example.com/mihomo-sub-${Date.now()}`;
+        state[SUBS_KEY] = [{ name: 'flow-sub', source: 'remote', url: subUrl }];
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            type: 'mihomoConfig',
+            sourceType: 'subscription',
+            sourceName: 'flow-sub',
+            mode: 'config',
+            process: [],
+        };
+        const requested = [];
+        openApi.HTTP = () => ({
+            head: async ({ url }) => {
+                requested.push(`HEAD ${url}`);
+                return {
+                    headers: {
+                        'subscription-userinfo':
+                            'upload=4; download=5; total=6; expire=4102444800',
+                    },
+                };
+            },
+            get: async ({ url }) => {
+                requested.push(`GET ${url}`);
+                return {
+                    body: 'proxies:\n  - {name: A, type: ss, server: a.example.com, port: 8388, cipher: aes-128-gcm, password: p}',
+                    headers: {},
+                    statusCode: 200,
+                };
+            },
+        });
+
+        const res = await requestFile();
+
+        expect(res.headers['subscription-userinfo']).to.contain('total=6');
+        expect(requested).to.include(`HEAD ${subUrl}`);
+    });
+
+    it('显式 subInfoUrl 优先于 mihomo 配置的上游链接', async function () {
+        const fileUrl = `https://example.com/mihomo-remote-explicit-${Date.now()}`;
+        const flowUrl = `https://example.com/flow-explicit-${Date.now()}`;
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            type: 'mihomoConfig',
+            sourceType: 'remote',
+            mode: 'config',
+            url: fileUrl,
+            subInfoUrl: flowUrl,
+            process: [],
+        };
+        const requested = [];
+        openApi.HTTP = () => ({
+            head: async ({ url }) => {
+                requested.push(`HEAD ${url}`);
+                return {
+                    headers: {
+                        'subscription-userinfo':
+                            'upload=7; download=8; total=9; expire=4102444800',
+                    },
+                };
+            },
+            get: async ({ url }) => {
+                requested.push(`GET ${url}`);
+                return { body: 'proxies: []', headers: {}, statusCode: 200 };
+            },
+        });
+
+        const res = await requestFile();
+
+        expect(res.headers['subscription-userinfo']).to.contain('total=9');
+        expect(requested).to.include(`HEAD ${flowUrl}`);
+        expect(requested).to.not.include(`HEAD ${fileUrl}`);
+    });
+
+    it('订阅填写订阅流量信息时直接使用, 不再请求订阅链接', async function () {
+        const subUrl = `https://example.com/mihomo-sub-userinfo-${Date.now()}`;
+        state[SUBS_KEY] = [
+            {
+                name: 'flow-sub',
+                source: 'remote',
+                url: subUrl,
+                subUserinfo:
+                    'upload=9; download=8; total=100; expire=4102444800; plan_name=手填套餐',
+            },
+        ];
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            type: 'mihomoConfig',
+            sourceType: 'subscription',
+            sourceName: 'flow-sub',
+            mode: 'config',
+            process: [],
+        };
+        const requested = [];
+        openApi.HTTP = () => ({
+            head: async ({ url }) => {
+                requested.push(`HEAD ${url}`);
+                return { headers: {} };
+            },
+            get: async ({ url }) => {
+                requested.push(`GET ${url}`);
+                return {
+                    body: 'proxies:\n  - {name: A, type: ss, server: a.example.com, port: 8388, cipher: aes-128-gcm, password: p}',
+                    headers: {},
+                    statusCode: 200,
+                };
+            },
+        });
+
+        const res = await requestFile();
+
+        expect(res.headers['subscription-userinfo']).to.contain('total=100');
+        expect(res.headers['plan-name']).to.equal('手填套餐');
+        expect(requested.filter((i) => i.startsWith('HEAD'))).to.deep.equal([]);
+    });
+
+    it('mihomo 配置组合订阅来源透传第一条订阅的流量信息', async function () {
+        const firstUrl = `https://example.com/mihomo-col-first-${Date.now()}`;
+        const secondUrl = `https://example.com/mihomo-col-second-${Date.now()}`;
+        state[SUBS_KEY] = [
+            { name: 'first-sub', source: 'remote', url: firstUrl },
+            { name: 'second-sub', source: 'remote', url: secondUrl },
+        ];
+        state[COLLECTIONS_KEY] = [
+            { name: 'flow-col', subscriptions: ['first-sub', 'second-sub'] },
+        ];
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            type: 'mihomoConfig',
+            sourceType: 'collection',
+            sourceName: 'flow-col',
+            mode: 'config',
+            process: [],
+        };
+        const requested = [];
+        openApi.HTTP = () => ({
+            head: async ({ url }) => {
+                requested.push(`HEAD ${url}`);
+                return {
+                    headers: {
+                        'subscription-userinfo':
+                            'upload=1; download=1; total=2; expire=4102444800',
+                    },
+                };
+            },
+            get: async ({ url }) => {
+                requested.push(`GET ${url}`);
+                return {
+                    body: 'proxies:\n  - {name: A, type: ss, server: a.example.com, port: 8388, cipher: aes-128-gcm, password: p}',
+                    headers: {},
+                    statusCode: 200,
+                };
+            },
+        });
+
+        const res = await requestFile();
+
+        expect(res.headers['subscription-userinfo']).to.contain('total=2');
+        expect(requested).to.include(`HEAD ${firstUrl}`);
+        expect(requested).to.not.include(`HEAD ${secondUrl}`);
+    });
+
+    it('分享链接同样自动使用上游链接的流量信息', async function () {
+        const fileUrl = `https://example.com/mihomo-share-${Date.now()}`;
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            type: 'mihomoConfig',
+            sourceType: 'remote',
+            mode: 'config',
+            url: fileUrl,
+            process: [],
+        };
+        openApi.HTTP = () => ({
+            head: async () => ({
+                headers: {
+                    'subscription-userinfo':
+                        'upload=2; download=3; total=4; expire=4102444800',
+                },
+            }),
+            get: async () => ({
+                body: 'proxies: []',
+                headers: {},
+                statusCode: 200,
+            }),
+        });
+
+        const res = await requestShareFile();
+
+        expect(res.headers['subscription-userinfo']).to.contain('total=4');
+    });
+
+    it('普通文件不按上游链接回退流量信息', async function () {
+        const fileUrl = `https://example.com/plain-file-${Date.now()}`;
+        state[FILES_KEY][0] = {
+            name: 'local-file',
+            source: 'remote',
+            url: fileUrl,
+            process: [],
+        };
+        const requested = [];
+        openApi.HTTP = () => ({
+            head: async ({ url }) => {
+                requested.push(`HEAD ${url}`);
+                return {
+                    headers: {
+                        'subscription-userinfo':
+                            'upload=2; download=3; total=4; expire=4102444800',
+                    },
+                };
+            },
+            get: async ({ url }) => {
+                requested.push(`GET ${url}`);
+                return { body: 'plain', headers: {}, statusCode: 200 };
+            },
+        });
+
+        const res = await requestFile();
+
+        expect(res.headers).to.not.have.property('subscription-userinfo');
+        expect(requested).to.deep.equal([`GET ${fileUrl}`]);
     });
 
     it('forces attachment download with the display name from query', async function () {

@@ -5,8 +5,13 @@ import {
     updateByName,
 } from '@/utils/database';
 import { getCreateItemPosition } from '@/utils/create-item-position';
-import { getFlowHeaders, normalizeFlowHeader } from '@/utils/flow';
-import { FILES_KEY, ARTIFACTS_KEY } from '@/constants';
+import { getFlowHeaders, normalizeFlowHeader, splitFlowUrl } from '@/utils/flow';
+import {
+    FILES_KEY,
+    ARTIFACTS_KEY,
+    COLLECTIONS_KEY,
+    SUBS_KEY,
+} from '@/constants';
 import { failed, success } from '@/restful/response';
 import $ from '@/core/app';
 import {
@@ -328,32 +333,19 @@ async function getFile(req, res, next) {
             });
 
             try {
-                const flowSubInfoUrl = sourceFile.subInfoUrl;
-                if (flowSubInfoUrl) {
+                const flowSource = resolveFlowSource(sourceFile);
+                if (flowSource) {
                     // forward flow headers
-                    const flowInfo = await getFlowHeaders(
-                        flowSubInfoUrl,
-                        sourceFile.subInfoUserAgent,
-                        undefined,
-                        sourceFile.proxy,
-                    );
+                    const flowInfo = flowSource.text
+                        ? flowSource.text
+                        : await fetchFlowInfo(flowSource);
                     if (flowInfo) {
-                        const headers = normalizeFlowHeader(flowInfo, true);
-                        if (headers?.['subscription-userinfo']) {
-                            res.set(
-                                'subscription-userinfo',
-                                headers['subscription-userinfo'],
-                            );
-                        }
-                        if (headers?.['profile-web-page-url']) {
-                            res.set(
-                                'profile-web-page-url',
-                                headers['profile-web-page-url'],
-                            );
-                        }
-                        if (headers?.['plan-name']) {
-                            res.set('plan-name', headers['plan-name']);
-                        }
+                        $.info(
+                            `文件 ${name} 使用${
+                                flowSource.description ?? '上游链接'
+                            }查询流量信息成功`,
+                        );
+                        applyFlowHeaders(res, flowInfo);
                     }
                 }
             } catch (err) {
@@ -703,6 +695,133 @@ function hasQueryValue(value) {
 
 function hasAnyQueryValue(values) {
     return values.some(hasQueryValue);
+}
+
+function applyFlowHeaders(res, flowInfo) {
+    const headers = normalizeFlowHeader(flowInfo, true);
+    for (const key of [
+        'subscription-userinfo',
+        'profile-web-page-url',
+        'plan-name',
+    ]) {
+        if (headers?.[key]) res.set(key, headers[key]);
+    }
+}
+
+async function fetchFlowInfo({ url, ua, proxy }) {
+    const { url: flowUrl, $arguments } = splitFlowUrl(url);
+    return getFlowHeaders(
+        $arguments?.insecure ? `${flowUrl}#insecure` : flowUrl,
+        $arguments?.flowUserAgent || ua,
+        undefined,
+        proxy,
+        $arguments?.flowUrl,
+        $arguments?.flowHeaders,
+    );
+}
+
+function firstUrlLine(url) {
+    return (
+        `${url ?? ''}`
+            .split(/[\r\n]+/)
+            .map((i) => i.trim())
+            .filter((i) => i.length)[0] || ''
+    );
+}
+
+function normalizeMihomoSourceType(sourceType) {
+    return ['collection', 'local', 'none', 'remote', 'subscription'].includes(
+        sourceType,
+    )
+        ? sourceType
+        : 'collection';
+}
+
+// mihomo 配置留空 subInfoUrl 时, 按来源回退到上游链接查询流量信息。
+function resolveFlowSource(file) {
+    const explicitSubInfoUrl = `${file?.subInfoUrl ?? ''}`.trim();
+    if (explicitSubInfoUrl) {
+        return {
+            url: explicitSubInfoUrl,
+            ua: file.subInfoUserAgent,
+            proxy: file.proxy,
+            description: '自定义流量信息链接',
+        };
+    }
+    // 只有 mihomo 配置按来源回退, 其他文件类型保持原有行为。
+    if (!isMihomoConfigFile(file)) return undefined;
+
+    const sourceType = normalizeMihomoSourceType(file.sourceType);
+    if (sourceType === 'remote') {
+        const url = firstUrlLine(file.url);
+        if (!url) return undefined;
+        return {
+            url,
+            ua: file.subInfoUserAgent || file.ua,
+            proxy: file.proxy,
+            description: '远程文件链接',
+        };
+    }
+    if (sourceType === 'subscription') {
+        return resolveSubFlowSource(
+            findByName($.read(SUBS_KEY) || [], file.sourceName),
+            file,
+        );
+    }
+    if (sourceType === 'collection') {
+        const collection = findByName(
+            $.read(COLLECTIONS_KEY) || [],
+            file.sourceName,
+        );
+        if (!collection) return undefined;
+        // 组合订阅自身填写的流量信息优先, 否则透传第一条单条订阅。
+        return (
+            resolveUserInfoFlow(
+                collection,
+                file,
+                `组合订阅 ${collection.name}`,
+            ) ??
+            resolveSubFlowSource(
+                findByName(
+                    $.read(SUBS_KEY) || [],
+                    (collection.subscriptions || [])[0],
+                ),
+                file,
+            )
+        );
+    }
+    return undefined;
+}
+
+function resolveSubFlowSource(sub, file) {
+    if (!sub || sub.noFlow) return undefined;
+    const ownedFlow = resolveUserInfoFlow(sub, file, `订阅 ${sub.name}`);
+    if (ownedFlow) return ownedFlow;
+    const localOnly =
+        sub.source === 'local' &&
+        !['localFirst', 'remoteFirst'].includes(sub.mergeSources);
+    const url = localOnly ? '' : firstUrlLine(sub.url);
+    if (!url) return undefined;
+    return {
+        url,
+        ua: file.subInfoUserAgent || sub.ua,
+        proxy: file.proxy || sub.proxy,
+        description: `订阅 ${sub.name} 的订阅链接`,
+    };
+}
+
+function resolveUserInfoFlow(owner, file, description) {
+    const value = `${owner?.subUserinfo ?? ''}`.trim();
+    if (!value || owner?.noFlow) return undefined;
+    if (/^https?:\/\//i.test(value)) {
+        return {
+            url: value,
+            ua: file.subInfoUserAgent,
+            proxy: file.proxy || owner.proxy,
+            description: `${description}填写的流量信息链接`,
+        };
+    }
+    return { text: value, description: `${description}填写的流量信息` };
 }
 
 export { createFileItem, deleteFileItem };
