@@ -1,0 +1,11 @@
+.git
+.agents
+.codex
+.github
+node_modules
+backend/node_modules
+backend/dist
+backend/sub-store.min.js
+npm-debug.log*
+pnpm-debug.log*
+*.log
